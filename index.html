@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Розыгрыш в чате — Kick</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#08090d;
+    --bg-1:#0d1018;
+    --panel: rgba(255,255,255,0.035);
+    --panel-solid:#11141c;
+    --line: rgba(255,255,255,0.09);
+    --line-soft: rgba(255,255,255,0.06);
+    --text:#eef1f6;
+    --muted:#8b93a3;
+    --green:#53fc18;
+    --green-soft: rgba(83,252,24,0.15);
+    --gold:#ffd166;
+    --danger:#ff6b6b;
+    --violet:#8ab4ff;
+    --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+    --display:"Space Grotesk", "Inter", sans-serif;
+    --r-lg: 26px;
+    --r-md: 16px;
+    --r-sm: 12px;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 50% -10%, rgba(138,180,255,0.10), transparent 60%),
+      radial-gradient(ellipse 700px 400px at 85% 10%, rgba(83,252,24,0.06), transparent 60%),
+      var(--bg-0);
+    color:var(--text);
+    font-family:var(--display);
+    min-height:100vh;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  a{color:var(--green);}
+
+  .wrap{
+    max-width:1080px;
+    margin:0 auto;
+    padding:22px 18px 60px;
+  }
+
+  /* top bar */
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:26px;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    font-family:var(--mono);
+    font-size:13px;
+    color:var(--muted);
+  }
+  .brand .mark{
+    background:var(--green);
+    color:#0a0c08;
+    font-weight:600;
+    padding:3px 8px;
+    border-radius:7px;
+  }
+  .status-pill{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--muted);
+    background:var(--panel);
+    border:1px solid var(--line);
+    padding:6px 12px;
+    border-radius:999px;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--muted); flex:none;}
+  .dot.live{background:var(--green); box-shadow:0 0 8px var(--green);}
+  .dot.err{background:var(--danger);}
+
+  /* hero */
+  .hero{
+    text-align:center;
+    padding:10px 0 28px;
+  }
+  .kw-pill{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-family:var(--mono);
+    font-size:14px;
+    color:var(--green);
+    background:var(--green-soft);
+    border:1px solid rgba(83,252,24,0.35);
+    padding:7px 16px;
+    border-radius:999px;
+    margin-bottom:18px;
+  }
+  .kw-pill .kw-label{color:var(--muted);}
+  .count-num{
+    font-family:var(--display);
+    font-weight:700;
+    font-size:clamp(56px, 11vw, 104px);
+    line-height:1;
+    letter-spacing:-0.03em;
+    background:linear-gradient(180deg, #ffffff 0%, #b9c3d6 100%);
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    text-shadow:0 0 60px rgba(138,180,255,0.25);
+  }
+  .count-label{
+    font-family:var(--mono);
+    font-size:13px;
+    color:var(--muted);
+    margin-top:6px;
+  }
+
+  /* panels */
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--r-lg);
+    padding:22px;
+    backdrop-filter: blur(6px);
+  }
+  .panel + .panel{margin-top:16px;}
+  .panel h2{
+    font-size:12px;
+    color:var(--muted);
+    font-family:var(--mono);
+    font-weight:400;
+    margin:0 0 14px;
+    letter-spacing:0.01em;
+  }
+
+  /* galaxy stage */
+  .stage{
+    position:relative;
+    border-radius:var(--r-lg);
+    background:radial-gradient(ellipse at 50% 40%, #171b2a 0%, #0b0d14 75%);
+    border:1px solid var(--line);
+    overflow:hidden;
+    padding:0;
+  }
+  .stage-canvas-wrap{
+    position:relative;
+    width:100%;
+    height:min(56vw, 380px);
+    min-height:260px;
+  }
+  canvas#galaxy{
+    display:block;
+    width:100%;
+    height:100%;
+  }
+  .winner-overlay{
+    position:absolute;
+    top:14%;
+    left:50%;
+    transform:translate(-50%, -10px);
+    text-align:center;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.5s ease, transform 0.5s ease;
+    width:100%;
+    padding:0 16px;
+  }
+  .winner-overlay.show{
+    opacity:1;
+    transform:translate(-50%, 0);
+  }
+  .winner-overlay .tag{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--gold);
+    letter-spacing:0.04em;
+    margin-bottom:4px;
+  }
+  .winners-list{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    max-height:min(70vw, 320px);
+    overflow-y:auto;
+  }
+  .winner-entry .name{
+    font-family:var(--display);
+    font-weight:700;
+    font-size:clamp(22px, 4.4vw, 42px);
+    color:#fff;
+    text-shadow:0 0 30px rgba(255,209,102,0.55), 0 0 6px rgba(255,209,102,0.8);
+  }
+  .winner-entry .msg{
+    margin-top:6px;
+    font-family:var(--mono);
+    font-size:13px;
+    color:#dfe4ee;
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.12);
+    display:inline-block;
+    padding:7px 14px;
+    border-radius:999px;
+    max-width:90%;
+    overflow-wrap:break-word;
+  }
+
+  .stage-foot{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:12px;
+    padding:18px 20px 22px;
+  }
+
+  button{
+    font-family:var(--display);
+    font-weight:600;
+    font-size:14px;
+    padding:12px 22px;
+    border:1px solid var(--line);
+    background:var(--panel-solid);
+    color:var(--text);
+    cursor:pointer;
+    border-radius:var(--r-sm);
+    transition:border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  }
+  button:hover{border-color:rgba(255,255,255,0.25);}
+  button:active{transform:scale(0.98);}
+  button:disabled{opacity:0.35; cursor:not-allowed; transform:none;}
+  button:focus-visible, input:focus-visible{outline:2px solid var(--green); outline-offset:2px;}
+
+  button.primary{
+    background:var(--green);
+    color:#0a0c08;
+    border-color:var(--green);
+    min-width:180px;
+  }
+  button.primary:hover{background:#6dfb3a;}
+
+  button.ghost{
+    background:transparent;
+    color:var(--muted);
+    font-size:13px;
+    padding:10px 16px;
+  }
+  button.ghost:hover{color:var(--text);}
+
+  /* two column lower area */
+  .lower{
+    display:grid;
+    grid-template-columns:340px 1fr;
+    gap:16px;
+    margin-top:16px;
+  }
+  @media (max-width:860px){
+    .lower{grid-template-columns:1fr;}
+  }
+
+  label{
+    display:block;
+    font-size:13px;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  input[type=text]{
+    width:100%;
+    background:var(--panel-solid);
+    border:1px solid var(--line);
+    color:var(--text);
+    font-family:var(--mono);
+    font-size:14px;
+    padding:10px 12px;
+    outline:none;
+    border-radius:var(--r-sm);
+  }
+  input[type=text]:focus{border-color:var(--green); box-shadow:0 0 0 3px var(--green-soft);}
+  input[type=text]::placeholder{color:#4d5563;}
+
+  .field{margin-bottom:14px;}
+
+  .row-check{
+    display:flex;
+    align-items:flex-start;
+    gap:8px;
+    font-size:13px;
+    color:var(--muted);
+    margin-bottom:10px;
+  }
+  .row-check input{accent-color:var(--green); margin-top:3px;}
+
+  .fallback{
+    display:none;
+    margin-top:14px;
+    padding-top:14px;
+    border-top:1px dashed var(--line);
+  }
+  .fallback.show{display:block;}
+  .hint{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:10px;
+    font-family:var(--mono);
+    line-height:1.6;
+  }
+
+  .feed{
+    height:400px;
+    overflow-y:auto;
+    background:var(--panel-solid);
+    border:1px solid var(--line-soft);
+    padding:10px 12px;
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:#c4ccd8;
+    border-radius:var(--r-md);
+  }
+  .feed-line{padding:2px 0; white-space:pre-wrap; word-break:break-word;}
+  .feed-line .u{color:var(--violet);}
+  .feed-line.match{color:var(--gold);}
+  .feed-line.match .u{color:var(--gold);}
+  .feed::-webkit-scrollbar{width:7px;}
+  .feed::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
+
+  .entrants{
+    display:flex;
+    flex-wrap:wrap;
+    gap:7px;
+    max-height:130px;
+    overflow-y:auto;
+    margin-top:12px;
+  }
+  .chip{
+    font-family:var(--mono);
+    font-size:12px;
+    padding:5px 11px;
+    background:var(--panel-solid);
+    border:1px solid var(--line);
+    color:#c4ccd8;
+    border-radius:999px;
+  }
+  .chip.excluded{opacity:0.35; text-decoration:line-through;}
+
+  .winner-reactions{ display:none; }
+  .winner-reactions.show{
+    display:block;
+    position:fixed;
+    width:min(420px, 92vw);
+    max-height:80vh;
+    overflow-y:auto;
+    z-index:50;
+    box-shadow:0 16px 50px rgba(0,0,0,0.55);
+  }
+  .winner-reactions.show .feed{
+    height:min(52vh, 520px);
+  }
+  .winner-reactions .feed-line .u{ color:var(--gold); }
+  .winner-reactions .feed-line{ font-size:14px; }
+  .winner-reactions h2{
+    font-size:13px;
+    cursor:grab;
+    user-select:none;
+    touch-action:none;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .winner-reactions h2::before{
+    content:"⠿";
+    color:var(--muted);
+    font-size:14px;
+  }
+  .winner-reactions h2:active{ cursor:grabbing; }
+
+  footer.foot{
+    margin-top:30px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:#565e6b;
+    text-align:center;
+    line-height:1.7;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    * { transition:none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand"><span class="mark">KICK</span> розыгрыш по слову в чате</div>
+    <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">не подключено</span></div>
+  </div>
+
+  <div class="hero">
+    <div class="kw-pill"><span class="kw-label">слово для участия:</span><span id="heroKeyword">—</span></div>
+    <div class="count-num" id="heroCount">0</div>
+    <div class="count-label">участников в розыгрыше</div>
+  </div>
+
+  <div class="stage panel" style="padding:0;">
+    <div class="stage-canvas-wrap">
+      <canvas id="galaxy"></canvas>
+      <div class="winner-overlay" id="winnerOverlay">
+        <div class="tag" id="winnerTag">ПОБЕДИТЕЛЬ</div>
+        <div class="winners-list" id="winnersList"></div>
+      </div>
+    </div>
+    <div class="stage-foot">
+      <button class="primary" id="drawBtn" disabled>Крутить</button>
+      <button class="ghost" id="resetBtn">Сбросить участников</button>
+    </div>
+  </div>
+
+  <div class="lower">
+    <div class="left">
+      <div class="panel">
+        <div class="field">
+          <label for="keywordInput">Слово для участия</label>
+          <input type="text" id="keywordInput" placeholder="например, !розыгрыш">
+        </div>
+        <div class="field">
+          <label for="winnersCountInput">Количество победителей</label>
+          <input type="text" inputmode="numeric" id="winnersCountInput" placeholder="1" value="1">
+        </div>
+        <div class="row-check">
+          <input type="checkbox" id="exactMatch" checked>
+          <label for="exactMatch" style="margin:0;">Сообщение должно быть ровно этим словом</label>
+        </div>
+        <div class="row-check">
+          <input type="checkbox" id="excludeWinners" checked>
+          <label for="excludeWinners" style="margin:0;">Не давать выигрывать повторно за сессию</label>
+        </div>
+        <button class="primary" id="connectBtn" style="width:100%;">Переподключиться к чату</button>
+
+        <div class="fallback" id="fallbackBox">
+          <label for="manualId">Не удалось получить ID чата автоматически. Введите ID вручную:</label>
+          <input type="text" id="manualId" placeholder="например, 668">
+          <div class="hint">
+            Откройте <span id="manualLinkWrap"></span> в новой вкладке и найдите в ответе <code>"chatroom":{"id": ЧИСЛО}</code> — впишите число сюда и подключитесь ещё раз.
+          </div>
+        </div>
+        <div class="hint" id="statusDetail"></div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <h2>лента чата</h2>
+        <div class="feed" id="feed"></div>
+        <div class="entrants" id="entrantList"></div>
+      </div>
+
+      <div class="panel winner-reactions" id="winnerReactionsPanel">
+        <h2>слова победителя — <span id="winnerReactionsName" style="color:var(--gold);"></span></h2>
+        <div class="feed" id="winnerReactionsFeed"></div>
+        <div class="hint" id="winnerReactionsHint">ждём, что победитель напишет после выигрыша…</div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="foot">
+    Работает напрямую в вашем браузере через открытый чат Kick, без сервера и без сохранения данных.<br>
+    Неофициальный способ подключения — Kick не публикует официальный API чата.
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  const PUSHER_URL = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=7.4.0&flash=false';
+
+  const CHANNEL_SLUG = 'helin139ban'; // из https://kick.com/popout/helin139ban/chat
+
+  const el = {
+    keyword: document.getElementById('keywordInput'),
+    winnersCount: document.getElementById('winnersCountInput'),
+    exact: document.getElementById('exactMatch'),
+    excludeWinners: document.getElementById('excludeWinners'),
+    connectBtn: document.getElementById('connectBtn'),
+    fallbackBox: document.getElementById('fallbackBox'),
+    manualId: document.getElementById('manualId'),
+    manualLinkWrap: document.getElementById('manualLinkWrap'),
+    statusDot: document.getElementById('statusDot'),
+    statusText: document.getElementById('statusText'),
+    statusDetail: document.getElementById('statusDetail'),
+    heroKeyword: document.getElementById('heroKeyword'),
+    heroCount: document.getElementById('heroCount'),
+    entrantList: document.getElementById('entrantList'),
+    resetBtn: document.getElementById('resetBtn'),
+    feed: document.getElementById('feed'),
+    drawBtn: document.getElementById('drawBtn'),
+    winnerOverlay: document.getElementById('winnerOverlay'),
+    winnerTag: document.getElementById('winnerTag'),
+    winnersList: document.getElementById('winnersList'),
+    winnerReactionsPanel: document.getElementById('winnerReactionsPanel'),
+    winnerReactionsName: document.getElementById('winnerReactionsName'),
+    winnerReactionsFeed: document.getElementById('winnerReactionsFeed'),
+    winnerReactionsHint: document.getElementById('winnerReactionsHint'),
+  };
+
+  let ws = null;
+  let entrants = new Map();   // key(lower) -> displayName
+  let entrantMessages = new Map(); // key(lower) -> последнее сообщение со словом для участия
+  let excluded = new Set();
+  let winnerReactionKeys = new Set(); // ключи победителей, чьи новые сообщения после выигрыша ловим
+  let drawing = false;
+
+  /* ---------------- status / feed / entrants UI ---------------- */
+
+  function setStatus(state, text, detail){
+    el.statusDot.className = 'dot' + (state === 'live' ? ' live' : state === 'err' ? ' err' : '');
+    el.statusText.textContent = text;
+    el.statusDetail.textContent = detail || '';
+  }
+
+  function logLine(username, content, isMatch){
+    const line = document.createElement('div');
+    line.className = 'feed-line' + (isMatch ? ' match' : '');
+    const u = document.createElement('span');
+    u.className = 'u';
+    u.textContent = username + ': ';
+    line.appendChild(u);
+    line.appendChild(document.createTextNode(content));
+    el.feed.appendChild(line);
+    el.feed.scrollTop = el.feed.scrollHeight;
+    while (el.feed.childNodes.length > 300) el.feed.removeChild(el.feed.firstChild);
+  }
+
+  function logWinnerReaction(username, content){
+    el.winnerReactionsHint.style.display = 'none';
+    const line = document.createElement('div');
+    line.className = 'feed-line';
+    const u = document.createElement('span');
+    u.className = 'u';
+    u.textContent = username + ': ';
+    line.appendChild(u);
+    line.appendChild(document.createTextNode(content));
+    el.winnerReactionsFeed.appendChild(line);
+    el.winnerReactionsFeed.scrollTop = el.winnerReactionsFeed.scrollHeight;
+    while (el.winnerReactionsFeed.childNodes.length > 100) el.winnerReactionsFeed.removeChild(el.winnerReactionsFeed.firstChild);
+  }
+
+  function renderEntrants(){
+    el.heroCount.textContent = entrants.size;
+    el.entrantList.innerHTML = '';
+    entrants.forEach((displayName, key) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip' + (excluded.has(key) ? ' excluded' : '');
+      chip.textContent = displayName;
+      el.entrantList.appendChild(chip);
+    });
+    el.drawBtn.disabled = eligibleEntrants().length === 0 || drawing;
+    syncParticles();
+  }
+
+  function eligibleEntrants(){
+    const out = [];
+    entrants.forEach((displayName, key) => {
+      if (!(el.excludeWinners.checked && excluded.has(key))) out.push(key);
+    });
+    return out;
+  }
+
+  function normalize(s){ return (s || '').trim().toLowerCase(); }
+
+  function updateHeroKeyword(){
+    const kw = el.keyword.value.trim();
+    el.heroKeyword.textContent = kw || '—';
+  }
+  el.keyword.addEventListener('input', updateHeroKeyword);
+  updateHeroKeyword();
+
+  function handleChatMessage(msg){
+    if (!msg || typeof msg.content !== 'string') return;
+    const username = msg.username || 'unknown';
+    const content = msg.content;
+    const kw = normalize(el.keyword.value);
+    let isMatch = false;
+    if (kw){
+      const msg = normalize(content);
+      isMatch = el.exact.checked ? (msg === kw) : msg.includes(kw);
+    }
+    logLine(username, content, isMatch);
+
+    if (winnerReactionKeys.size && winnerReactionKeys.has(username.toLowerCase())){
+      logWinnerReaction(username, content);
+    }
+
+    if (isMatch){
+      const key = username.toLowerCase();
+      entrantMessages.set(key, content);
+      if (!entrants.has(key)){
+        entrants.set(key, username);
+        renderEntrants();
+      }
+    }
+  }
+
+  /* ---------------- connection ---------------- */
+
+  async function lookupChatroomId(slug){
+    const res = await fetch('https://kick.com/api/v2/channels/' + encodeURIComponent(slug), { headers: { 'Accept': 'application/json' }});
+    if (!res.ok) throw new Error('http ' + res.status);
+    const json = await res.json();
+    if (!json || !json.chatroom || !json.chatroom.id) throw new Error('нет chatroom.id');
+    return json.chatroom.id;
+  }
+
+  function connectWebSocket(chatroomId){
+    setStatus('connecting', 'подключение к чату…', '');
+    ws = new WebSocket(PUSHER_URL);
+
+    let subscribed = [];
+    let eventsSeen = 0;
+    let chatSeen = 0;
+
+    function updateLiveDetail(){
+      setStatus('live', 'в эфире — слушаю чат', 'сообщений: ' + chatSeen);
+    }
+
+    // Kick меняла формат имени Pusher-канала между версиями клиента,
+    // поэтому подписываемся сразу на все известные варианты —
+    // лишние подписки Pusher просто проигнорирует.
+    const channelCandidates = [
+      'chatrooms.' + chatroomId + '.v2',
+      'chatroom.' + chatroomId + '.v2',
+      'chatrooms.' + chatroomId,
+      'chatroom.' + chatroomId,
+    ];
+
+    ws.onmessage = (evt) => {
+      let outer;
+      try { outer = JSON.parse(evt.data); } catch(e){ return; }
+      eventsSeen++;
+
+      if (outer.event === 'pusher:connection_established'){
+        channelCandidates.forEach((ch) => {
+          ws.send(JSON.stringify({ event:'pusher:subscribe', data:{ channel: ch } }));
+        });
+        setStatus('connecting', 'подписка на канал чата…', 'сообщений: 0');
+        return;
+      }
+
+      if (outer.event === 'pusher_internal:subscription_succeeded'){
+        if (outer.channel) subscribed.push(outer.channel);
+        updateLiveDetail();
+        return;
+      }
+
+      if (outer.event === 'pusher:error' || outer.event === 'pusher_internal:subscription_error'){
+        console.warn('Kick/Pusher error event:', outer);
+        setStatus('err', 'pusher вернул ошибку подписки', JSON.stringify(outer.data || outer));
+        return;
+      }
+
+      // событие чат-сообщения — имя менялось у Kick, ловим оба варианта
+      if (/App\\Events\\ChatMessage(Sent)?Event$/.test(outer.event)){
+        let data;
+        try { data = JSON.parse(outer.data); } catch(e){ console.warn('не удалось разобрать data', outer); return; }
+        const parsed = extractChatMessage(data);
+        console.log('kick chat event:', outer.event, data);
+        if (parsed){
+          chatSeen++;
+          if (subscribed.length) updateLiveDetail();
+          handleChatMessage(parsed);
+        }
+        return;
+      }
+    };
+
+    ws.onerror = () => setStatus('err', 'ошибка соединения', 'проверьте ID чата и подключение к интернету');
+    ws.onclose = () => setStatus('idle', 'отключено', '');
+  }
+
+  // Kick присылает сообщения чата в разных форматах в зависимости от версии клиента —
+  // пробуем распознать содержимое максимально гибко.
+  function extractChatMessage(data){
+    if (!data) return null;
+    if (data.sender && typeof data.content === 'string'){
+      return { username: data.sender.username || data.sender.slug || 'unknown', content: data.content };
+    }
+    if (data.user && data.message && typeof data.message.message === 'string'){
+      return { username: data.user.username || data.user.slug || 'unknown', content: data.message.message };
+    }
+    if (data.sender && data.message && typeof data.message === 'string'){
+      return { username: data.sender.username || data.sender.slug || 'unknown', content: data.message };
+    }
+    return null;
+  }
+
+  function disconnect(){
+    if (ws){ try { ws.close(); } catch(e){} ws = null; }
+  }
+
+  const manualUrl = 'https://kick.com/api/v2/channels/' + encodeURIComponent(CHANNEL_SLUG);
+  el.manualLinkWrap.innerHTML = '<a href="' + manualUrl + '" target="_blank" rel="noopener">' + manualUrl + '</a>';
+
+  async function connectToChannel(){
+    disconnect();
+
+    const manual = el.manualId.value.trim();
+    if (manual && /^\d+$/.test(manual)){ connectWebSocket(manual); return; }
+
+    setStatus('connecting', 'ищу канал helin139ban…', '');
+    try {
+      const id = await lookupChatroomId(CHANNEL_SLUG);
+      el.fallbackBox.classList.remove('show');
+      connectWebSocket(id);
+    } catch (e){
+      el.fallbackBox.classList.add('show');
+      setStatus('err', 'не удалось найти канал автоматически', 'см. подсказку ниже, чтобы ввести ID чата вручную');
+    }
+  }
+
+  el.connectBtn.addEventListener('click', connectToChannel);
+  el.manualId.addEventListener('keydown', (e) => { if (e.key === 'Enter') connectToChannel(); });
+
+  // подключаемся сразу при загрузке страницы, канал фиксирован
+  connectToChannel();
+
+  el.resetBtn.addEventListener('click', () => {
+    entrants.clear();
+    entrantMessages.clear();
+    excluded.clear();
+    renderEntrants();
+    hideWinner();
+  });
+
+  el.excludeWinners.addEventListener('change', renderEntrants);
+
+  function randomIndex(n){
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    return arr[0] % n;
+  }
+
+  /* ---------------- galaxy animation ---------------- */
+
+  const canvas = document.getElementById('galaxy');
+  const ctx = canvas.getContext('2d');
+  const wrap = canvas.parentElement;
+  let W = 0, H = 0, DPR = Math.max(1, window.devicePixelRatio || 1);
+  // палитра для участников — без белого, чтобы точки участников выделялись
+  // на фоне россыпи белых фоновых звёзд
+  const palette = ['#8ab4ff', '#b98aff', '#53fc18', '#6ee7ff', '#ff8ac2', '#ffd166'];
+
+  const particles = new Map(); // key -> particle (участники розыгрыша, цветные)
+  let bgStars = [];            // декоративные белые звёзды фона
+  let animState = 'idle';      // idle | spinup | launch
+  let stateStart = 0;
+  let speedMul = 1;
+  let winnerKeys = [];
+  let winnerParticles = [];
+  let launchOrigins = [];
+  let currentDrawCount = 1;
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function makeBgStar(){
+    return {
+      angle: Math.random() * Math.PI * 2,
+      radius: 20 + Math.random() * (Math.min(W, H) * 0.48),
+      speed: 0.05 + Math.random() * 0.09,
+      size: 0.7 + Math.random() * 1.5,
+      osc: 0.4 + Math.random() * 0.6,
+      phase: Math.random() * Math.PI * 2,
+      alpha: 0.25 + Math.random() * 0.5,
+    };
+  }
+
+  function resizeCanvas(){
+    W = wrap.clientWidth;
+    H = wrap.clientHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const count = Math.max(90, Math.min(220, Math.round((W * H) / 3200)));
+    bgStars = new Array(count).fill(0).map(makeBgStar);
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  function randomOffscreenPoint(){
+    // случайная точка за пределами холста — точка "вылетает из ниоткуда"
+    const side = Math.floor(Math.random() * 4);
+    const pad = 70;
+    if (side === 0) return { x: Math.random() * W, y: -pad };
+    if (side === 1) return { x: W + pad, y: Math.random() * H };
+    if (side === 2) return { x: Math.random() * W, y: H + pad };
+    return { x: -pad, y: Math.random() * H };
+  }
+
+  function makeParticle(key, silent){
+    const angle = Math.random() * Math.PI * 2;
+    const band = Math.random();
+    return {
+      key,
+      angle,
+      radius: 40 + band * (Math.min(W, H) * 0.42),
+      speed: 0.18 + Math.random() * 0.12,
+      size: 1.6 + Math.random() * 2.2,
+      osc: 0.6 + Math.random() * 0.8,
+      phase: Math.random() * Math.PI * 2,
+      color: palette[Math.floor(Math.random() * palette.length)],
+      alpha: 0.55 + Math.random() * 0.4,
+      entering: !silent,
+      enterStart: performance.now(),
+      enterDur: 650 + Math.random() * 300,
+      enterFrom: randomOffscreenPoint(),
+    };
+  }
+
+  function syncParticles(){
+    entrants.forEach((_, key) => {
+      if (!particles.has(key)) particles.set(key, makeParticle(key));
+    });
+    // drop particles for entrants that no longer exist (e.g. after reset)
+    particles.forEach((_, key) => {
+      if (!entrants.has(key)) particles.delete(key);
+    });
+  }
+
+  function cx(){ return W / 2; }
+  function cy(){ return H * 0.52; }
+
+  let lastT = performance.now();
+
+  function frame(t){
+    const dt = Math.min(40, t - lastT);
+    lastT = t;
+
+    // полная очистка кадра — без "хвостов"/разводов за движущимися точками
+    ctx.clearRect(0, 0, W, H);
+
+    const now = t;
+    let fadeOthers = 1;
+
+    if (animState === 'spinup'){
+      const p = Math.min(1, (now - stateStart) / 900);
+      speedMul = 1 + p * 9;
+      if (p >= 1){
+        beginLaunch(now);
+      }
+    } else if (animState === 'launch'){
+      const p = Math.min(1, (now - stateStart) / 1100);
+      speedMul = Math.max(0.4, 10 * (1 - p));
+      fadeOthers = 0.85 - p * 0.65;
+      if (winnerParticles.length){
+        const n = winnerParticles.length;
+        winnerParticles.forEach((wp, i) => {
+          const origin = launchOrigins[i] || { x: cx(), y: cy() };
+          const spread = n > 1 ? (i - (n - 1) / 2) * 70 : 0;
+          const targetX = cx() + spread;
+          const targetY = -H * 0.18;
+          wp._x = origin.x + (targetX - origin.x) * easeOutCubic(p);
+          wp._y = origin.y + (targetY - origin.y) * easeOutCubic(p);
+          wp._sizeMul = 1 + p * 2.2;
+          wp._alpha = Math.max(0, 1 - p * 1.15);
+        });
+        if (p > 0.55 && !el.winnerOverlay.classList.contains('show')){
+          showWinners(winnerKeys);
+        }
+      }
+      if (p >= 1){
+        animState = 'done';
+        speedMul = 0.35;
+      }
+    } else if (animState === 'idle' || animState === 'done'){
+      speedMul += (1 - speedMul) * 0.02;
+    }
+
+    const gx = cx(), gy = cy();
+
+    // фон: россыпь белых звёзд (чисто декоративные, не связаны с участниками)
+    bgStars.forEach((s) => {
+      s.angle += s.speed * speedMul * (dt / 1000);
+      const r = s.radius + Math.sin(now / 1000 * s.osc + s.phase) * 3;
+      const x = gx + Math.cos(s.angle) * r;
+      const y = gy + Math.sin(s.angle) * r * 0.5;
+      const depth = (Math.sin(s.angle) * 0.5 + 0.5);
+      const size = s.size * (0.7 + depth * 0.6);
+      const alpha = s.alpha * (0.5 + depth * 0.5) * fadeOthers;
+      drawStar(x, y, size, '#ffffff', alpha, 3 + size * 2);
+    });
+
+    particles.forEach((p) => {
+      const isWinner = winnerParticles.includes(p);
+      if (isWinner && (animState === 'launch' || animState === 'done')){
+        if (p._alpha <= 0) return;
+        drawStar(p._x, p._y, p.size * (p._sizeMul || 1), '#ffd166', p._alpha, 22);
+        return;
+      }
+
+      p.angle += p.speed * speedMul * (dt / 1000);
+      const r = p.radius + Math.sin(now / 1000 * p.osc + p.phase) * 4;
+      const nx = gx + Math.cos(p.angle) * r;
+      const ny = gy + Math.sin(p.angle) * r * 0.5;
+      const depth = (Math.sin(p.angle) * 0.5 + 0.5); // 0..1, "front" particles bigger
+      const size = p.size * (0.7 + depth * 0.8);
+      const alpha = p.alpha * (0.5 + depth * 0.5) * fadeOthers;
+
+      let x = nx, y = ny, drawAlpha = alpha, drawSize = size, drawGlow = 8 + size * 2;
+
+      if (p.entering){
+        const ep = Math.min(1, (now - p.enterStart) / p.enterDur);
+        const eased = easeOutCubic(ep);
+        x = p.enterFrom.x + (nx - p.enterFrom.x) * eased;
+        y = p.enterFrom.y + (ny - p.enterFrom.y) * eased;
+        drawAlpha = Math.min(1, alpha + (1 - ep) * 0.6);
+        drawSize = size * (1 + (1 - ep) * 2);
+        drawGlow = 16 + (1 - ep) * 14;
+        if (ep >= 1) p.entering = false;
+      }
+
+      drawStar(x, y, drawSize, p.color, drawAlpha, drawGlow);
+
+      // remember last position for potential launch
+      p._x = x; p._y = y;
+    });
+
+    requestAnimationFrame(frame);
+  }
+
+  function drawStar(x, y, size, color, alpha, glowBlur){
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    if (glowBlur){
+      ctx.shadowColor = color;
+      ctx.shadowBlur = glowBlur;
+    }
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function easeOutCubic(x){ return 1 - Math.pow(1 - x, 3); }
+
+  requestAnimationFrame((t) => { lastT = t; requestAnimationFrame(frame); });
+
+  /* ---------------- draw flow ---------------- */
+
+  function hideWinner(){
+    el.winnerOverlay.classList.remove('show');
+    el.winnersList.innerHTML = '';
+    winnerKeys = [];
+    winnerParticles = [];
+    launchOrigins = [];
+    animState = 'idle';
+
+    winnerReactionKeys = new Set();
+    el.winnerReactionsPanel.classList.remove('show');
+    el.winnerReactionsFeed.innerHTML = '';
+    el.winnerReactionsName.textContent = '';
+    el.winnerReactionsHint.style.display = '';
+  }
+
+  function showWinners(keys){
+    el.winnerTag.textContent = keys.length > 1 ? 'ПОБЕДИТЕЛИ' : 'ПОБЕДИТЕЛЬ';
+    el.winnersList.innerHTML = '';
+    keys.forEach((key) => {
+      const displayName = entrants.get(key) || key;
+      const msg = entrantMessages.get(key);
+      const entry = document.createElement('div');
+      entry.className = 'winner-entry';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'name';
+      nameEl.textContent = displayName;
+      entry.appendChild(nameEl);
+      if (msg){
+        const msgEl = document.createElement('div');
+        msgEl.className = 'msg';
+        msgEl.textContent = '« ' + msg + ' »';
+        entry.appendChild(msgEl);
+      }
+      el.winnersList.appendChild(entry);
+    });
+    el.winnerOverlay.classList.add('show');
+
+    // с этого момента ловим и показываем все новые сообщения победителей —
+    // так видно их реакцию на выигрыш
+    winnerReactionKeys = new Set(keys);
+    el.winnerReactionsFeed.innerHTML = '';
+    el.winnerReactionsHint.style.display = '';
+    el.winnerReactionsName.textContent = keys.map((k) => entrants.get(k) || k).join(', ');
+    el.winnerReactionsPanel.classList.add('show');
+    centerReactionsPanel();
+  }
+
+  function beginLaunch(now){
+    animState = 'launch';
+    stateStart = now;
+    const pool = eligibleEntrants();
+    const count = Math.max(1, Math.min(pool.length, currentDrawCount));
+    const poolCopy = pool.slice();
+    winnerKeys = [];
+    for (let i = 0; i < count; i++){
+      const idx = randomIndex(poolCopy.length);
+      winnerKeys.push(poolCopy[idx]);
+      poolCopy.splice(idx, 1);
+    }
+    winnerParticles = winnerKeys.map((key) => {
+      let wp = particles.get(key);
+      if (!wp){ wp = makeParticle(key, true); particles.set(key, wp); }
+      return wp;
+    });
+    launchOrigins = winnerParticles.map((wp) => ({ x: wp._x || cx(), y: wp._y || cy() }));
+  }
+
+  el.drawBtn.addEventListener('click', () => {
+    const pool = eligibleEntrants();
+    if (pool.length === 0 || drawing) return;
+    const requested = parseInt(el.winnersCount.value, 10) || 1;
+    currentDrawCount = Math.max(1, Math.min(pool.length, requested));
+    drawing = true;
+    el.drawBtn.disabled = true;
+    hideWinner();
+
+    if (reduceMotion){
+      const poolCopy = pool.slice();
+      const keys = [];
+      for (let i = 0; i < currentDrawCount; i++){
+        const idx = randomIndex(poolCopy.length);
+        keys.push(poolCopy[idx]);
+        poolCopy.splice(idx, 1);
+      }
+      showWinners(keys);
+      keys.forEach((k) => excluded.add(k));
+      drawing = false;
+      renderEntrants();
+      return;
+    }
+
+    animState = 'spinup';
+    stateStart = performance.now();
+
+    const checkDone = setInterval(() => {
+      if (animState === 'done'){
+        clearInterval(checkDone);
+        winnerKeys.forEach((k) => excluded.add(k));
+        drawing = false;
+        renderEntrants();
+      }
+    }, 100);
+  });
+
+  /* ---------------- перетаскиваемая панель "слова победителя" ---------------- */
+
+  function centerReactionsPanel(){
+    const panel = el.winnerReactionsPanel;
+    // ждём кадр, чтобы у панели уже были реальные размеры (display:block применился)
+    requestAnimationFrame(() => {
+      const w = panel.offsetWidth || 420;
+      const h = panel.offsetHeight || 320;
+      panel.style.left = Math.max(8, Math.round((window.innerWidth - w) / 2)) + 'px';
+      panel.style.top = Math.max(8, Math.round((window.innerHeight - h) / 2)) + 'px';
+      panel.style.right = 'auto';
+    });
+  }
+
+  function clampPanelToViewport(){
+    const panel = el.winnerReactionsPanel;
+    if (!panel.classList.contains('show')) return;
+    const rect = panel.getBoundingClientRect();
+    let left = rect.left, top = rect.top;
+    left = Math.min(left, window.innerWidth - rect.width - 4);
+    top = Math.min(top, window.innerHeight - rect.height - 4);
+    left = Math.max(4, left);
+    top = Math.max(4, top);
+    panel.style.left = Math.round(left) + 'px';
+    panel.style.top = Math.round(top) + 'px';
+  }
+  window.addEventListener('resize', clampPanelToViewport);
+
+  (function makeReactionsPanelDraggable(){
+    const panel = el.winnerReactionsPanel;
+    const handle = panel.querySelector('h2');
+    let dragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0;
+
+    handle.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      handle.setPointerCapture(e.pointerId);
+      const rect = panel.getBoundingClientRect();
+      startX = e.clientX;
+      startY = e.clientY;
+      origLeft = rect.left;
+      origTop = rect.top;
+    });
+
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const w = panel.offsetWidth, h = panel.offsetHeight;
+      let left = origLeft + dx;
+      let top = origTop + dy;
+      left = Math.max(4, Math.min(window.innerWidth - w - 4, left));
+      top = Math.max(4, Math.min(window.innerHeight - h - 4, top));
+      panel.style.left = Math.round(left) + 'px';
+      panel.style.top = Math.round(top) + 'px';
+      panel.style.right = 'auto';
+    });
+
+    function endDrag(e){
+      if (!dragging) return;
+      dragging = false;
+      try { handle.releasePointerCapture(e.pointerId); } catch(err){}
+    }
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+  })();
+
+  renderEntrants();
+})();
+</script>
+</body>
+</html>
