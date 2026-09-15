@@ -1,0 +1,1742 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Розыгрыш в чате — Kick</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-0:#08090d;
+    --bg-1:#0d1018;
+    --panel: rgba(255,255,255,0.035);
+    --panel-solid:#11141c;
+    --cell-solid:#0d1017;
+    --line: rgba(255,255,255,0.09);
+    --line-soft: rgba(255,255,255,0.06);
+    --text:#eef1f6;
+    --muted:#8b93a3;
+    --green:#53fc18;
+    --green-soft: rgba(83,252,24,0.15);
+    --gold:#ffd166;
+    --danger:#ff6b6b;
+    --violet:#8ab4ff;
+    --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+    --display:"Space Grotesk", "Inter", sans-serif;
+    --r-lg: 26px;
+    --r-md: 16px;
+    --r-sm: 12px;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(ellipse 900px 500px at 50% -10%, rgba(138,180,255,0.10), transparent 60%),
+      radial-gradient(ellipse 700px 400px at 85% 10%, rgba(83,252,24,0.06), transparent 60%),
+      var(--bg-0);
+    color:var(--text);
+    font-family:var(--display);
+    min-height:100vh;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  a{color:var(--green);}
+
+  /* uses almost the full viewport width — the whole site lives in one big
+     merged window so wide screens don't leave empty space on the sides.
+     Sizing here is done with vw/%/clamp() (not fixed px) so the layout keeps
+     its proportions the same whether the window is resized or the page is
+     zoomed in/out. */
+  .wrap{
+    width:100%;
+    max-width:none;
+    margin:0 auto;
+    padding:clamp(14px, 2vw, 28px) clamp(14px, 2.4vw, 34px) 48px;
+  }
+
+  /* top bar */
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:clamp(14px, 2vw, 22px);
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    font-family:var(--mono);
+    font-size:13px;
+    color:var(--muted);
+  }
+  .brand .mark{
+    background:var(--green);
+    color:#0a0c08;
+    font-weight:600;
+    padding:3px 8px;
+    border-radius:7px;
+  }
+  .status-pill{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--muted);
+    background:var(--panel);
+    border:1px solid var(--line);
+    padding:6px 12px;
+    border-radius:999px;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--muted); flex:none;}
+  .dot.live{background:var(--green); box-shadow:0 0 8px var(--green);}
+  .dot.err{background:var(--danger);}
+
+  /* hero */
+  .hero{
+    text-align:center;
+    padding:6px 0 22px;
+  }
+  .kw-pill{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-family:var(--mono);
+    font-size:14px;
+    color:var(--green);
+    background:var(--green-soft);
+    border:1px solid rgba(83,252,24,0.35);
+    padding:7px 16px;
+    border-radius:999px;
+    margin-bottom:16px;
+  }
+  .kw-pill .kw-label{color:var(--muted);}
+  .count-num{
+    font-family:var(--display);
+    font-weight:700;
+    font-size:clamp(48px, 7vw, 96px);
+    line-height:1;
+    letter-spacing:-0.03em;
+    background:linear-gradient(180deg, #ffffff 0%, #b9c3d6 100%);
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    text-shadow:0 0 60px rgba(138,180,255,0.25);
+  }
+  .count-label{
+    font-family:var(--mono);
+    font-size:13px;
+    color:var(--muted);
+    margin-top:6px;
+  }
+
+  /* ===== ONE merged big window ===== */
+  /* everything (settings, stage/galaxy, winner history, chat feed) now lives
+     inside a single outer frame, like small windows arranged inside one big
+     panel, so the whole site reads as one app instead of several stacked
+     cards. */
+  .mega{
+    position:relative;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--r-lg);
+    padding:clamp(14px, 1.6vw, 22px);
+    backdrop-filter: blur(6px);
+    overflow:hidden;
+  }
+
+  .mega-grid{
+    display:grid;
+    grid-template-columns: minmax(240px, 300px) minmax(0, 2.2fr) minmax(240px, 300px);
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "settings stage history"
+      "feed     stage feed2";
+    gap:clamp(12px, 1.2vw, 18px);
+    align-items:stretch;
+  }
+  /* the chat feed spans the full bottom row so it can be wide and readable */
+  .cell-feed{ grid-area: feed / feed / feed2 / feed2; }
+
+  @media (min-width:1600px){
+    /* very wide screens: put the feed as its own 4th column instead of a
+       full-width row underneath, so all four "windows" sit side by side */
+    .mega-grid{
+      grid-template-columns: minmax(260px, 320px) minmax(0, 2.4fr) minmax(260px, 320px) minmax(280px, 360px);
+      grid-template-areas: "settings stage history feed";
+    }
+  }
+
+  @media (max-width:1180px){
+    .mega-grid{
+      grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+      grid-template-areas:
+        "settings stage"
+        "history  stage"
+        "feed     feed";
+    }
+  }
+
+  @media (max-width:760px){
+    .mega-grid{
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "stage"
+        "settings"
+        "history"
+        "feed";
+    }
+  }
+
+  /* small windows inside the big one */
+  .cell{
+    background:var(--cell-solid);
+    border:1px solid var(--line-soft);
+    border-radius:var(--r-md);
+    padding:18px;
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+  }
+  .cell h2{
+    font-size:12px;
+    color:var(--muted);
+    font-family:var(--mono);
+    font-weight:400;
+    margin:0 0 14px;
+    letter-spacing:0.01em;
+  }
+
+  .settings-cell{ grid-area:settings; }
+  .stage-cell{ grid-area:stage; padding:0; overflow:hidden; }
+  .history-cell{ grid-area:history; max-height:min(52vh, 620px); }
+
+  /* stage (galaxy + draw controls) */
+  .stage-cell{
+    display:flex;
+    flex-direction:column;
+    background:radial-gradient(ellipse at 50% 40%, #171b2a 0%, #0b0d14 75%);
+  }
+  .stage-canvas-wrap{
+    position:relative;
+    width:100%;
+    flex:1;
+    height:min(52vh, 520px);
+    min-height:300px;
+  }
+  canvas#galaxy{
+    display:block;
+    width:100%;
+    height:100%;
+  }
+  .winner-overlay{
+    position:absolute;
+    top:14%;
+    left:50%;
+    transform:translate(-50%, -10px);
+    text-align:center;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.5s ease, transform 0.5s ease;
+    width:100%;
+    padding:0 16px;
+  }
+  .winner-overlay.show{
+    opacity:1;
+    transform:translate(-50%, 0);
+  }
+  .winner-overlay .tag{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--gold);
+    letter-spacing:0.04em;
+    margin-bottom:4px;
+  }
+  .winners-list{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    max-height:min(70vw, 320px);
+    overflow-y:auto;
+  }
+  .winner-entry .name{
+    font-family:var(--display);
+    font-weight:700;
+    font-size:clamp(22px, 4.4vw, 42px);
+    color:#fff;
+    text-shadow:0 0 30px rgba(255,209,102,0.55), 0 0 6px rgba(255,209,102,0.8);
+  }
+  .winner-entry .msg{
+    margin-top:6px;
+    font-family:var(--mono);
+    font-size:13px;
+    color:#dfe4ee;
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.12);
+    display:inline-block;
+    padding:7px 14px;
+    border-radius:999px;
+    max-width:90%;
+    overflow-wrap:break-word;
+  }
+
+  .stage-foot{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:12px;
+    padding:16px 18px 18px;
+    border-top:1px solid var(--line-soft);
+  }
+
+  button{
+    font-family:var(--display);
+    font-weight:600;
+    font-size:14px;
+    padding:12px 22px;
+    border:1px solid var(--line);
+    background:var(--panel-solid);
+    color:var(--text);
+    cursor:pointer;
+    border-radius:var(--r-sm);
+    transition:border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  }
+  button:hover{border-color:rgba(255,255,255,0.25);}
+  button:active{transform:scale(0.98);}
+  button:disabled{opacity:0.35; cursor:not-allowed; transform:none;}
+  button:focus-visible, input:focus-visible{outline:2px solid var(--green); outline-offset:2px;}
+
+  button.primary{
+    background:var(--green);
+    color:#0a0c08;
+    border-color:var(--green);
+    min-width:160px;
+  }
+  button.primary:hover{background:#6dfb3a;}
+
+  button.ghost{
+    background:transparent;
+    color:var(--muted);
+    font-size:13px;
+    padding:10px 16px;
+  }
+  button.ghost:hover{color:var(--text);}
+
+  /* history (winner list) */
+  .history-cell{
+    display:flex;
+    flex-direction:column;
+  }
+  .history-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:14px;
+  }
+  .history-cell h2{ font-size:13px; margin:0; }
+  button.ghost.small{
+    padding:5px 10px;
+    font-size:11px;
+    border-radius:8px;
+    flex:none;
+  }
+  .history-list{
+    flex:1;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    gap:9px;
+    margin-top:2px;
+    min-height:0;
+  }
+  .history-list::-webkit-scrollbar{width:6px;}
+  .history-list::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
+  .history-empty{
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:12px;
+    padding:6px 0;
+  }
+  .history-entry{
+    background:var(--panel-solid);
+    border:1px solid var(--line-soft);
+    border-radius:var(--r-sm);
+    padding:10px 12px;
+    flex:none;
+  }
+  .h-name{
+    font-weight:600;
+    font-size:14px;
+    color:var(--gold);
+  }
+  .h-msg{
+    font-family:var(--mono);
+    font-size:12px;
+    color:#c4ccd8;
+    margin-top:3px;
+    overflow-wrap:break-word;
+  }
+  .h-time{
+    font-family:var(--mono);
+    font-size:10.5px;
+    color:var(--muted);
+    margin-top:5px;
+  }
+  .history-hint{
+    font-size:11px;
+    color:#565e6b;
+    font-family:var(--mono);
+    margin-top:10px;
+  }
+
+  /* settings cell */
+  label{
+    display:block;
+    font-size:13px;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  input[type=text]{
+    width:100%;
+    background:var(--panel-solid);
+    border:1px solid var(--line);
+    color:var(--text);
+    font-family:var(--mono);
+    font-size:14px;
+    padding:10px 12px;
+    outline:none;
+    border-radius:var(--r-sm);
+  }
+  input[type=text]:focus{border-color:var(--green); box-shadow:0 0 0 3px var(--green-soft);}
+  input[type=text]::placeholder{color:#4d5563;}
+
+  .field{margin-bottom:14px;}
+
+  .row-check{
+    display:flex;
+    align-items:flex-start;
+    gap:8px;
+    font-size:13px;
+    color:var(--muted);
+    margin-bottom:10px;
+  }
+  .row-check input{accent-color:var(--green); margin-top:3px;}
+
+  .settings-cell .connect-spacer{flex:1;}
+
+  .fallback{
+    display:none;
+    margin-top:14px;
+    padding-top:14px;
+    border-top:1px dashed var(--line);
+  }
+  .fallback.show{display:block;}
+  .hint{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:10px;
+    font-family:var(--mono);
+    line-height:1.6;
+  }
+
+  /* chat feed cell */
+  .cell-feed{
+    display:flex;
+    flex-direction:column;
+  }
+  .feed{
+    flex:1;
+    height:100%;
+    min-height:180px;
+    max-height:min(40vh, 460px);
+    overflow-y:auto;
+    background:var(--panel-solid);
+    border:1px solid var(--line-soft);
+    padding:10px 12px;
+    font-family:var(--mono);
+    font-size:12.5px;
+    color:#c4ccd8;
+    border-radius:var(--r-md);
+  }
+  .feed-line{padding:2px 0; white-space:pre-wrap; word-break:break-word;}
+  .feed-line .u{color:var(--violet);}
+  .feed-line.match{color:var(--gold);}
+  .feed-line.match .u{color:var(--gold);}
+  .feed::-webkit-scrollbar{width:7px;}
+  .feed::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
+
+  .winner-reactions{ display:none; }
+  .winner-reactions.show{
+    display:block;
+    position:fixed;
+    width:min(420px, 92vw);
+    max-height:80vh;
+    overflow-y:auto;
+    z-index:50;
+    background:var(--panel-solid);
+    border:1px solid var(--line);
+    border-radius:var(--r-lg);
+    padding:18px;
+    box-shadow:0 16px 50px rgba(0,0,0,0.55);
+  }
+  .winner-reactions.show .feed{
+    height:min(52vh, 520px);
+    max-height:none;
+  }
+  .winner-reactions .feed-line .u{ color:var(--gold); }
+  .winner-reactions .feed-line{ font-size:14px; }
+  .winner-reactions h2{
+    font-size:13px;
+    color:var(--muted);
+    font-family:var(--mono);
+    font-weight:400;
+    margin:0 0 14px;
+    cursor:grab;
+    user-select:none;
+    touch-action:none;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .winner-reactions h2::before{
+    content:"⠿";
+    color:var(--muted);
+    font-size:14px;
+  }
+  .winner-reactions h2:active{ cursor:grabbing; }
+  .winner-reactions .close-x{
+    margin-left:auto;
+    padding:3px 9px;
+    font-size:12px;
+    line-height:1;
+    border-radius:8px;
+    cursor:pointer;
+  }
+  .rw-timer{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--muted);
+    margin:-2px 0 10px;
+  }
+  .rw-timer .rw-dot{
+    width:6px;height:6px;border-radius:50%;
+    background:var(--gold);
+    box-shadow:0 0 6px var(--gold);
+    flex:none;
+    animation:rwPulse 1s ease-in-out infinite;
+  }
+  .rw-timer.done .rw-dot{
+    background:var(--green);
+    box-shadow:0 0 6px var(--green);
+    animation:none;
+  }
+  .rw-timer.done{ color:var(--green); }
+  @keyframes rwPulse{
+    0%,100%{opacity:1;}
+    50%{opacity:0.35;}
+  }
+
+  footer.foot{
+    margin-top:26px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:#565e6b;
+    text-align:center;
+    line-height:1.7;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    * { transition:none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand"><span class="mark">KICK</span> розыгрыш по слову в чате</div>
+    <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">не подключено</span></div>
+  </div>
+
+  <div class="hero">
+    <div class="kw-pill"><span class="kw-label">слово для участия:</span><span id="heroKeyword">—</span></div>
+    <div class="count-num" id="heroCount">0</div>
+    <div class="count-label">участников в розыгрыше</div>
+  </div>
+
+  <div class="mega">
+    <div class="mega-grid">
+
+      <div class="cell settings-cell">
+        <h2>настройки</h2>
+        <div class="field">
+          <label for="keywordInput">Слово для участия</label>
+          <input type="text" id="keywordInput" placeholder="например, !розыгрыш">
+        </div>
+        <div class="field">
+          <label for="winnersCountInput">Количество победителей</label>
+          <input type="text" inputmode="numeric" id="winnersCountInput" placeholder="1" value="1">
+        </div>
+        <div class="row-check">
+          <input type="checkbox" id="exactMatch" checked>
+          <label for="exactMatch" style="margin:0;">Сообщение должно быть ровно этим словом</label>
+        </div>
+        <div class="row-check">
+          <input type="checkbox" id="excludeWinners" checked>
+          <label for="excludeWinners" style="margin:0;">Не давать выигрывать повторно за сессию</label>
+        </div>
+        <div class="connect-spacer"></div>
+        <button class="primary" id="connectBtn" style="width:100%;">Переподключиться к чату</button>
+
+        <div class="fallback" id="fallbackBox">
+          <label for="manualId">Не удалось получить ID чата автоматически. Введите ID вручную:</label>
+          <input type="text" id="manualId" placeholder="например, 668">
+          <div class="hint">
+            Откройте <span id="manualLinkWrap"></span> в новой вкладке и найдите в ответе <code>"chatroom":{"id": ЧИСЛО}</code> — впишите число сюда и подключитесь ещё раз.
+          </div>
+        </div>
+        <div class="hint" id="statusDetail"></div>
+      </div>
+
+      <div class="cell stage-cell">
+        <div class="stage-canvas-wrap">
+          <canvas id="galaxy"></canvas>
+          <div class="winner-overlay" id="winnerOverlay">
+            <div class="tag" id="winnerTag">ПОБЕДИТЕЛЬ</div>
+            <div class="winners-list" id="winnersList"></div>
+          </div>
+        </div>
+        <div class="stage-foot">
+          <button class="primary" id="drawBtn" disabled>Крутить</button>
+          <button class="ghost" id="resetBtn">Сбросить участников</button>
+        </div>
+      </div>
+
+      <div class="cell history-cell">
+        <div class="history-head">
+          <h2>история победителей</h2>
+          <button type="button" class="ghost small" id="clearHistoryBtn">очистить</button>
+        </div>
+        <div class="history-list" id="historyList">
+          <div class="history-empty">пока никто не выигрывал</div>
+        </div>
+        <div class="history-hint">хранится только в этом браузере</div>
+      </div>
+
+      <div class="cell cell-feed">
+        <h2>лента чата</h2>
+        <div class="feed" id="feed"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer class="foot">
+    Работает напрямую в вашем браузере через открытый чат Kick, без сервера и без сохранения данных.<br>
+    Неофициальный способ подключения — Kick не публикует официальный API чата.
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  const PUSHER_URL = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=7.4.0&flash=false';
+
+  const CHANNEL_SLUG = 'helin139ban'; // из https://kick.com/popout/helin139ban/chat
+
+  const el = {
+    keyword: document.getElementById('keywordInput'),
+    winnersCount: document.getElementById('winnersCountInput'),
+    exact: document.getElementById('exactMatch'),
+    excludeWinners: document.getElementById('excludeWinners'),
+    connectBtn: document.getElementById('connectBtn'),
+    fallbackBox: document.getElementById('fallbackBox'),
+    manualId: document.getElementById('manualId'),
+    manualLinkWrap: document.getElementById('manualLinkWrap'),
+    statusDot: document.getElementById('statusDot'),
+    statusText: document.getElementById('statusText'),
+    statusDetail: document.getElementById('statusDetail'),
+    heroKeyword: document.getElementById('heroKeyword'),
+    heroCount: document.getElementById('heroCount'),
+    resetBtn: document.getElementById('resetBtn'),
+    feed: document.getElementById('feed'),
+    drawBtn: document.getElementById('drawBtn'),
+    winnerOverlay: document.getElementById('winnerOverlay'),
+    winnerTag: document.getElementById('winnerTag'),
+    winnersList: document.getElementById('winnersList'),
+    historyList: document.getElementById('historyList'),
+    clearHistoryBtn: document.getElementById('clearHistoryBtn'),
+  };
+
+  let ws = null;
+  let entrants = new Map();   // key(lower) -> displayName
+  let entrantMessages = new Map(); // key(lower) -> последнее сообщение со словом для участия
+  let excluded = new Set();
+  let reactionWindows = new Map(); // key(lower) -> { panel, feed, hint } — отдельное плавающее окно на победителя
+  let drawing = false;
+
+  /* ---------------- история победителей (хранится в этом браузере) ---------------- */
+
+  const HISTORY_KEY = 'kickRaffleWinnerHistory_v1';
+
+  function loadHistory(){
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch(e){ return []; }
+  }
+
+  function saveHistory(){
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(winnerHistory.slice(0, 200))); } catch(e){}
+  }
+
+  let winnerHistory = loadHistory();
+
+  function addHistoryEntries(keys){
+    const timeStr = new Date().toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    keys.forEach((key) => {
+      winnerHistory.unshift({
+        name: entrants.get(key) || key,
+        message: entrantMessages.get(key) || '',
+        time: timeStr,
+      });
+    });
+    winnerHistory = winnerHistory.slice(0, 200);
+    saveHistory();
+    renderHistory();
+  }
+
+  function renderHistory(){
+    el.historyList.innerHTML = '';
+    if (!winnerHistory.length){
+      const empty = document.createElement('div');
+      empty.className = 'history-empty';
+      empty.textContent = 'пока никто не выигрывал';
+      el.historyList.appendChild(empty);
+      return;
+    }
+    winnerHistory.forEach((entry) => {
+      const row = document.createElement('div');
+      row.className = 'history-entry';
+
+      const name = document.createElement('div');
+      name.className = 'h-name';
+      name.textContent = entry.name;
+      row.appendChild(name);
+
+      if (entry.message){
+        const msg = document.createElement('div');
+        msg.className = 'h-msg';
+        msg.textContent = '« ' + entry.message + ' »';
+        row.appendChild(msg);
+      }
+
+      const time = document.createElement('div');
+      time.className = 'h-time';
+      time.textContent = entry.time;
+      row.appendChild(time);
+
+      el.historyList.appendChild(row);
+    });
+  }
+
+  renderHistory();
+
+  el.clearHistoryBtn.addEventListener('click', () => {
+    winnerHistory = [];
+    saveHistory();
+    renderHistory();
+  });
+
+  /* ---------------- status / feed / entrants UI ---------------- */
+
+  function setStatus(state, text, detail){
+    el.statusDot.className = 'dot' + (state === 'live' ? ' live' : state === 'err' ? ' err' : '');
+    el.statusText.textContent = text;
+    el.statusDetail.textContent = detail || '';
+  }
+
+  function logLine(username, content, isMatch){
+    const line = document.createElement('div');
+    line.className = 'feed-line' + (isMatch ? ' match' : '');
+    const u = document.createElement('span');
+    u.className = 'u';
+    u.textContent = username + ': ';
+    line.appendChild(u);
+    line.appendChild(document.createTextNode(content));
+    el.feed.appendChild(line);
+    el.feed.scrollTop = el.feed.scrollHeight;
+    while (el.feed.childNodes.length > 300) el.feed.removeChild(el.feed.firstChild);
+  }
+
+  function logWinnerReaction(username, content){
+    const rw = reactionWindows.get(username.toLowerCase());
+    if (!rw) return;
+    rw.hint.style.display = 'none';
+    if (!rw.stopped){
+      rw.stopped = true;
+      clearInterval(rw.timerInterval);
+      const elapsed = formatElapsed(performance.now() - rw.startTime);
+      rw.timerText.textContent = elapsed + ' — ответил(а)';
+      rw.timerEl.classList.add('done');
+    }
+    const line = document.createElement('div');
+    line.className = 'feed-line';
+    const u = document.createElement('span');
+    u.className = 'u';
+    u.textContent = username + ': ';
+    line.appendChild(u);
+    line.appendChild(document.createTextNode(content));
+    rw.feed.appendChild(line);
+    rw.feed.scrollTop = rw.feed.scrollHeight;
+    while (rw.feed.childNodes.length > 100) rw.feed.removeChild(rw.feed.firstChild);
+  }
+
+  function renderEntrants(){
+    el.heroCount.textContent = entrants.size;
+    el.drawBtn.disabled = eligibleEntrants().length === 0 || drawing;
+    syncParticles();
+  }
+
+  function eligibleEntrants(){
+    const out = [];
+    entrants.forEach((displayName, key) => {
+      if (!(el.excludeWinners.checked && excluded.has(key))) out.push(key);
+    });
+    return out;
+  }
+
+  function normalize(s){ return (s || '').trim().toLowerCase(); }
+
+  function updateHeroKeyword(){
+    const kw = el.keyword.value.trim();
+    el.heroKeyword.textContent = kw || '—';
+  }
+  el.keyword.addEventListener('input', updateHeroKeyword);
+  updateHeroKeyword();
+
+  function handleChatMessage(msg){
+    if (!msg || typeof msg.content !== 'string') return;
+    const username = msg.username || 'unknown';
+    const content = msg.content;
+    const kw = normalize(el.keyword.value);
+    let isMatch = false;
+    if (kw){
+      const msg = normalize(content);
+      isMatch = el.exact.checked ? (msg === kw) : msg.includes(kw);
+    }
+    logLine(username, content, isMatch);
+
+    if (reactionWindows.size){
+      logWinnerReaction(username, content);
+    }
+
+    if (isMatch){
+      const key = username.toLowerCase();
+      entrantMessages.set(key, content);
+      if (!entrants.has(key)){
+        entrants.set(key, username);
+        renderEntrants();
+      }
+    }
+  }
+
+  /* ---------------- connection ---------------- */
+
+  async function lookupChatroomId(slug){
+    const res = await fetch('https://kick.com/api/v2/channels/' + encodeURIComponent(slug), { headers: { 'Accept': 'application/json' }});
+    if (!res.ok) throw new Error('http ' + res.status);
+    const json = await res.json();
+    if (!json || !json.chatroom || !json.chatroom.id) throw new Error('нет chatroom.id');
+    return json.chatroom.id;
+  }
+
+  function connectWebSocket(chatroomId){
+    setStatus('connecting', 'подключение к чату…', '');
+    ws = new WebSocket(PUSHER_URL);
+
+    let subscribed = [];
+    let eventsSeen = 0;
+    let chatSeen = 0;
+
+    function updateLiveDetail(){
+      setStatus('live', 'в эфире — слушаю чат', 'сообщений: ' + chatSeen);
+    }
+
+    // Kick меняла формат имени Pusher-канала между версиями клиента,
+    // поэтому подписываемся сразу на все известные варианты —
+    // лишние подписки Pusher просто проигнорирует.
+    const channelCandidates = [
+      'chatrooms.' + chatroomId + '.v2',
+      'chatroom.' + chatroomId + '.v2',
+      'chatrooms.' + chatroomId,
+      'chatroom.' + chatroomId,
+    ];
+
+    ws.onmessage = (evt) => {
+      let outer;
+      try { outer = JSON.parse(evt.data); } catch(e){ return; }
+      eventsSeen++;
+
+      if (outer.event === 'pusher:connection_established'){
+        channelCandidates.forEach((ch) => {
+          ws.send(JSON.stringify({ event:'pusher:subscribe', data:{ channel: ch } }));
+        });
+        setStatus('connecting', 'подписка на канал чата…', 'сообщений: 0');
+        return;
+      }
+
+      if (outer.event === 'pusher_internal:subscription_succeeded'){
+        if (outer.channel) subscribed.push(outer.channel);
+        updateLiveDetail();
+        return;
+      }
+
+      if (outer.event === 'pusher:error' || outer.event === 'pusher_internal:subscription_error'){
+        console.warn('Kick/Pusher error event:', outer);
+        setStatus('err', 'pusher вернул ошибку подписки', JSON.stringify(outer.data || outer));
+        return;
+      }
+
+      // событие чат-сообщения — имя менялось у Kick, ловим оба варианта
+      if (/App\\Events\\ChatMessage(Sent)?Event$/.test(outer.event)){
+        let data;
+        try { data = JSON.parse(outer.data); } catch(e){ console.warn('не удалось разобрать data', outer); return; }
+        const parsed = extractChatMessage(data);
+        console.log('kick chat event:', outer.event, data);
+        if (parsed){
+          chatSeen++;
+          if (subscribed.length) updateLiveDetail();
+          handleChatMessage(parsed);
+        }
+        return;
+      }
+    };
+
+    ws.onerror = () => setStatus('err', 'ошибка соединения', 'проверьте ID чата и подключение к интернету');
+    ws.onclose = () => setStatus('idle', 'отключено', '');
+  }
+
+  // Kick присылает сообщения чата в разных форматах в зависимости от версии клиента —
+  // пробуем распознать содержимое максимально гибко.
+  function extractChatMessage(data){
+    if (!data) return null;
+    if (data.sender && typeof data.content === 'string'){
+      return { username: data.sender.username || data.sender.slug || 'unknown', content: data.content };
+    }
+    if (data.user && data.message && typeof data.message.message === 'string'){
+      return { username: data.user.username || data.user.slug || 'unknown', content: data.message.message };
+    }
+    if (data.sender && data.message && typeof data.message === 'string'){
+      return { username: data.sender.username || data.sender.slug || 'unknown', content: data.message };
+    }
+    return null;
+  }
+
+  function disconnect(){
+    if (ws){ try { ws.close(); } catch(e){} ws = null; }
+  }
+
+  const manualUrl = 'https://kick.com/api/v2/channels/' + encodeURIComponent(CHANNEL_SLUG);
+  el.manualLinkWrap.innerHTML = '<a href="' + manualUrl + '" target="_blank" rel="noopener">' + manualUrl + '</a>';
+
+  async function connectToChannel(){
+    disconnect();
+
+    const manual = el.manualId.value.trim();
+    if (manual && /^\d+$/.test(manual)){ connectWebSocket(manual); return; }
+
+    setStatus('connecting', 'ищу канал helin139ban…', '');
+    try {
+      const id = await lookupChatroomId(CHANNEL_SLUG);
+      el.fallbackBox.classList.remove('show');
+      connectWebSocket(id);
+    } catch (e){
+      el.fallbackBox.classList.add('show');
+      setStatus('err', 'не удалось найти канал автоматически', 'см. подсказку ниже, чтобы ввести ID чата вручную');
+    }
+  }
+
+  el.connectBtn.addEventListener('click', connectToChannel);
+  el.manualId.addEventListener('keydown', (e) => { if (e.key === 'Enter') connectToChannel(); });
+
+  // подключаемся сразу при загрузке страницы, канал фиксирован
+  connectToChannel();
+
+  el.resetBtn.addEventListener('click', () => {
+    entrants.clear();
+    entrantMessages.clear();
+    excluded.clear();
+    renderEntrants();
+    hideWinner();
+  });
+
+  el.excludeWinners.addEventListener('change', renderEntrants);
+
+  function randomIndex(n){
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    return arr[0] % n;
+  }
+
+  /* ---------------- galaxy animation ---------------- */
+
+  const canvas = document.getElementById('galaxy');
+  const ctx = canvas.getContext('2d');
+  const wrap = canvas.parentElement;
+  let W = 0, H = 0, DPR = Math.max(1, window.devicePixelRatio || 1);
+  // палитра для участников — без белого, чтобы точки участников выделялись
+  // на фоне россыпи белых фоновых звёзд
+  const palette = ['#8ab4ff', '#b98aff', '#53fc18', '#6ee7ff', '#ff8ac2', '#ffd166'];
+
+  const particles = new Map(); // key -> particle (участники розыгрыша, цветные)
+  let bgStars = [];            // декоративные белые звёзды фона
+  let animState = 'idle';      // idle | spinup | launch
+  let stateStart = 0;
+  let speedMul = 1;
+  let winnerKeys = [];
+  let winnerParticles = [];
+  let launchOrigins = [];
+  let currentDrawCount = 1;
+
+  const SPINUP_MS = 1900;   // «интрига» — раскрутка перед выбором
+  const LAUNCH_MS = 1300;   // вылет победителя
+
+  // «почти выпал» — во время раскрутки подсвечиваем случайные точки с их ником
+  let flashKey = null, flashUntil = 0, nextFlashAt = 0;
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function makeBgStar(){
+    return {
+      angle: Math.random() * Math.PI * 2,
+      radius: 20 + Math.random() * (Math.min(W, H) * 0.48),
+      speed: 0.05 + Math.random() * 0.09,
+      size: 0.7 + Math.random() * 1.5,
+      osc: 0.4 + Math.random() * 0.6,
+      phase: Math.random() * Math.PI * 2,
+      alpha: 0.25 + Math.random() * 0.5,
+    };
+  }
+
+  function resizeCanvas(){
+    W = wrap.clientWidth;
+    H = wrap.clientHeight;
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const count = Math.max(90, Math.min(220, Math.round((W * H) / 3200)));
+    bgStars = new Array(count).fill(0).map(makeBgStar);
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  function randomOffscreenPoint(){
+    // случайная точка за пределами холста — точка "вылетает из ниоткуда"
+    const side = Math.floor(Math.random() * 4);
+    const pad = 70;
+    if (side === 0) return { x: Math.random() * W, y: -pad };
+    if (side === 1) return { x: W + pad, y: Math.random() * H };
+    if (side === 2) return { x: Math.random() * W, y: H + pad };
+    return { x: -pad, y: Math.random() * H };
+  }
+
+  function makeParticle(key, silent){
+    const angle = Math.random() * Math.PI * 2;
+    const band = Math.random();
+    return {
+      key,
+      angle,
+      radius: 40 + band * (Math.min(W, H) * 0.42),
+      speed: 0.18 + Math.random() * 0.12,
+      size: 1.6 + Math.random() * 2.2,
+      osc: 0.6 + Math.random() * 0.8,
+      phase: Math.random() * Math.PI * 2,
+      color: palette[Math.floor(Math.random() * palette.length)],
+      alpha: 0.55 + Math.random() * 0.4,
+      entering: !silent,
+      enterStart: performance.now(),
+      enterDur: 650 + Math.random() * 300,
+      enterFrom: randomOffscreenPoint(),
+    };
+  }
+
+  function syncParticles(){
+    entrants.forEach((_, key) => {
+      if (!particles.has(key)) particles.set(key, makeParticle(key));
+    });
+    // drop particles for entrants that no longer exist (e.g. after reset)
+    particles.forEach((_, key) => {
+      if (!entrants.has(key)) particles.delete(key);
+    });
+  }
+
+  function cx(){ return W / 2; }
+  function cy(){ return H * 0.52; }
+
+  let lastT = performance.now();
+
+  function updateNearMissFlash(now){
+    if (now > nextFlashAt){
+      const pool = eligibleEntrants();
+      flashKey = pool.length ? pool[randomIndex(pool.length)] : null;
+      flashUntil = now + 200 + Math.random() * 160;
+      nextFlashAt = now + 230 + Math.random() * 220;
+    }
+  }
+
+  function drawMilkyWayBand(gx, gy){
+    // мягкая полоса млечного пути на фоне
+    const band = ctx.createLinearGradient(0, gy - H * 0.35, 0, gy + H * 0.35);
+    band.addColorStop(0, 'rgba(160,180,255,0)');
+    band.addColorStop(0.5, 'rgba(170,190,255,0.06)');
+    band.addColorStop(1, 'rgba(160,180,255,0)');
+    ctx.save();
+    ctx.fillStyle = band;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  function drawNameLabel(x, y, size, text, alpha, color){
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    ctx.fillStyle = color || '#eef1f6';
+    ctx.font = '10px "IBM Plex Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 4;
+    ctx.fillText(text, x, y - size - 5);
+    ctx.restore();
+  }
+
+  function drawRocket(x, y, scale, alpha){
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.translate(x, y);
+    ctx.rotate(-Math.PI / 2); // носом вверх
+    ctx.font = (16 + scale * 8) + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🚀', 0, 0);
+    ctx.restore();
+  }
+
+  function frame(t){
+    const dt = Math.min(40, t - lastT);
+    lastT = t;
+
+    // полная очистка кадра — без "хвостов"/разводов за движущимися точками
+    ctx.clearRect(0, 0, W, H);
+
+    const now = t;
+    let fadeOthers = 1;
+    let spinupProgress = 0;
+
+    if (animState === 'spinup'){
+      const p = Math.min(1, (now - stateStart) / SPINUP_MS);
+      spinupProgress = p;
+      speedMul = 1 + p * 9;
+      updateNearMissFlash(now);
+      if (p >= 1){
+        beginLaunch(now);
+      }
+    } else if (animState === 'launch'){
+      const p = Math.min(1, (now - stateStart) / LAUNCH_MS);
+      speedMul = Math.max(0.4, 10 * (1 - p));
+      fadeOthers = 0.85 - p * 0.65;
+      if (winnerParticles.length){
+        const n = winnerParticles.length;
+        winnerParticles.forEach((wp, i) => {
+          const origin = launchOrigins[i] || { x: cx(), y: cy() };
+          const spread = n > 1 ? (i - (n - 1) / 2) * 70 : 0;
+          const targetX = cx() + spread;
+          const targetY = -H * 0.18;
+          wp._x = origin.x + (targetX - origin.x) * easeOutCubic(p);
+          wp._y = origin.y + (targetY - origin.y) * easeOutCubic(p);
+          wp._sizeMul = 1 + p * 2.2;
+          wp._alpha = Math.max(0, 1 - p * 1.15);
+        });
+        if (p > 0.55 && !el.winnerOverlay.classList.contains('show')){
+          showWinners(winnerKeys);
+        }
+      }
+      if (p >= 1){
+        animState = 'done';
+        speedMul = 0.35;
+      }
+    } else if (animState === 'idle' || animState === 'done'){
+      speedMul += (1 - speedMul) * 0.02;
+    }
+
+    const gx = cx(), gy = cy();
+
+    drawMilkyWayBand(gx, gy);
+
+    // "сплетение" точек-кандидатов во время раскрутки — наглядно видно,
+    // кто сейчас может выиграть: тонкие линии тянутся между ближайшими участниками
+    if (animState === 'spinup'){
+      const candidateKeys = eligibleEntrants();
+      const pts = candidateKeys
+        .map((k) => particles.get(k))
+        .filter((p) => p && p._x !== undefined);
+      ctx.save();
+      ctx.lineWidth = 1;
+      pts.forEach((p, i) => {
+        let nearest = null, nearestD = Infinity, second = null, secondD = Infinity;
+        pts.forEach((q, j) => {
+          if (i === j) return;
+          const dx = p._x - q._x, dy = p._y - q._y;
+          const d = dx * dx + dy * dy;
+          if (d < nearestD){ second = nearest; secondD = nearestD; nearest = q; nearestD = d; }
+          else if (d < secondD){ second = q; secondD = d; }
+        });
+        [nearest, second].forEach((q, qi) => {
+          if (!q) return;
+          const grad = ctx.createLinearGradient(p._x, p._y, q._x, q._y);
+          grad.addColorStop(0, p.color);
+          grad.addColorStop(1, q.color);
+          ctx.strokeStyle = grad;
+          ctx.globalAlpha = (qi === 0 ? 0.3 : 0.16) + 0.12 * Math.sin(now / 180 + i);
+          ctx.beginPath();
+          ctx.moveTo(p._x, p._y);
+          ctx.lineTo(q._x, q._y);
+          ctx.stroke();
+        });
+      });
+      ctx.restore();
+    }
+
+    // фон: россыпь белых звёзд (чисто декоративные, не связаны с участниками)
+    bgStars.forEach((s) => {
+      s.angle += s.speed * speedMul * (dt / 1000);
+      const r = s.radius + Math.sin(now / 1000 * s.osc + s.phase) * 3;
+      const x = gx + Math.cos(s.angle) * r;
+      const y = gy + Math.sin(s.angle) * r * 0.5;
+      const depth = (Math.sin(s.angle) * 0.5 + 0.5);
+      const size = s.size * (0.7 + depth * 0.6);
+      const alpha = s.alpha * (0.5 + depth * 0.5) * fadeOthers;
+      drawStar(x, y, size, '#ffffff', alpha, 3 + size * 2);
+    });
+
+    particles.forEach((p) => {
+      const isWinner = winnerParticles.includes(p);
+      if (isWinner && (animState === 'launch' || animState === 'done')){
+        if (p._alpha <= 0) return;
+        // мигающий цвет победителя под конец
+        const hue = (now / 30) % 360;
+        const winnerColor = animState === 'launch' ? `hsl(${hue}, 100%, 66%)` : '#ffd166';
+        const drawnSize = p.size * (p._sizeMul || 1);
+        drawStar(p._x, p._y, drawnSize, winnerColor, p._alpha, 26);
+        drawRocket(p._x, p._y - drawnSize - 4, (p._sizeMul || 1) - 1, p._alpha);
+        const displayName = entrants.get(p.key) || p.key;
+        drawNameLabel(p._x, p._y, drawnSize + 8, displayName, p._alpha, '#ffd166');
+        return;
+      }
+
+      p.angle += p.speed * speedMul * (dt / 1000);
+      const r = p.radius + Math.sin(now / 1000 * p.osc + p.phase) * 4;
+      const nx = gx + Math.cos(p.angle) * r;
+      const ny = gy + Math.sin(p.angle) * r * 0.5;
+      const depth = (Math.sin(p.angle) * 0.5 + 0.5); // 0..1, "front" particles bigger
+      const size = p.size * (0.7 + depth * 0.8);
+      const alpha = p.alpha * (0.5 + depth * 0.5) * fadeOthers;
+
+      let x = nx, y = ny, drawAlpha = alpha, drawSize = size, drawGlow = 8 + size * 2;
+
+      if (p.entering){
+        const ep = Math.min(1, (now - p.enterStart) / p.enterDur);
+        const eased = easeOutCubic(ep);
+        x = p.enterFrom.x + (nx - p.enterFrom.x) * eased;
+        y = p.enterFrom.y + (ny - p.enterFrom.y) * eased;
+        drawAlpha = Math.min(1, alpha + (1 - ep) * 0.6);
+        drawSize = size * (1 + (1 - ep) * 2);
+        drawGlow = 16 + (1 - ep) * 14;
+        if (ep >= 1) p.entering = false;
+      }
+
+      // «почти выпал» — во время раскрутки редкая яркая вспышка с ником,
+      // чтобы была интрига кто вот-вот выпадет
+      const isFlashing = animState === 'spinup' && p.key === flashKey && now < flashUntil;
+      if (isFlashing){
+        drawSize *= 1.9;
+        drawGlow = 32;
+        drawAlpha = 1;
+      }
+
+      drawStar(x, y, drawSize, p.color, drawAlpha, drawGlow);
+
+      // ники участников всегда немного видно в млечном пути,
+      // ярче — если участник сейчас "почти выпал"
+      const label = entrants.get(p.key);
+      if (label){
+        const labelAlpha = isFlashing ? 1 : Math.min(0.6, drawAlpha * 0.85 + 0.1);
+        drawNameLabel(x, y, drawSize, label, labelAlpha, isFlashing ? '#ffd166' : '#c9d2e3');
+      }
+
+      // remember last position for potential launch
+      p._x = x; p._y = y;
+    });
+
+    requestAnimationFrame(frame);
+  }
+
+  function drawStar(x, y, size, color, alpha, glowBlur){
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    if (glowBlur){
+      ctx.shadowColor = color;
+      ctx.shadowBlur = glowBlur;
+    }
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function easeOutCubic(x){ return 1 - Math.pow(1 - x, 3); }
+
+  requestAnimationFrame((t) => { lastT = t; requestAnimationFrame(frame); });
+
+  /* ---------------- draw flow ---------------- */
+
+  function hideWinner(){
+    el.winnerOverlay.classList.remove('show');
+    el.winnersList.innerHTML = '';
+    winnerKeys = [];
+    winnerParticles = [];
+    launchOrigins = [];
+    animState = 'idle';
+
+    closeAllReactionWindows();
+  }
+
+  function showWinners(keys){
+    el.winnerTag.textContent = keys.length > 1 ? 'ПОБЕДИТЕЛИ' : 'ПОБЕДИТЕЛЬ';
+    el.winnersList.innerHTML = '';
+    keys.forEach((key) => {
+      const displayName = entrants.get(key) || key;
+      const entry = document.createElement('div');
+      entry.className = 'winner-entry';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'name';
+      nameEl.textContent = displayName;
+      entry.appendChild(nameEl);
+      el.winnersList.appendChild(entry);
+    });
+    el.winnerOverlay.classList.add('show');
+
+    // отдельное плавающее окно на каждого победителя — так видно реакцию каждого
+    keys.forEach((key, i) => openReactionWindow(key, i));
+
+    addHistoryEntries(keys);
+  }
+
+  function beginLaunch(now){
+    animState = 'launch';
+    stateStart = now;
+    const pool = eligibleEntrants();
+    const count = Math.max(1, Math.min(pool.length, currentDrawCount));
+    const poolCopy = pool.slice();
+    winnerKeys = [];
+    for (let i = 0; i < count; i++){
+      const idx = randomIndex(poolCopy.length);
+      winnerKeys.push(poolCopy[idx]);
+      poolCopy.splice(idx, 1);
+    }
+    winnerParticles = winnerKeys.map((key) => {
+      let wp = particles.get(key);
+      if (!wp){ wp = makeParticle(key, true); particles.set(key, wp); }
+      return wp;
+    });
+    launchOrigins = winnerParticles.map((wp) => ({ x: wp._x || cx(), y: wp._y || cy() }));
+  }
+
+  el.drawBtn.addEventListener('click', () => {
+    const pool = eligibleEntrants();
+    if (pool.length === 0 || drawing) return;
+    const requested = parseInt(el.winnersCount.value, 10) || 1;
+    currentDrawCount = Math.max(1, Math.min(pool.length, requested));
+    drawing = true;
+    el.drawBtn.disabled = true;
+    hideWinner();
+
+    if (reduceMotion){
+      const poolCopy = pool.slice();
+      const keys = [];
+      for (let i = 0; i < currentDrawCount; i++){
+        const idx = randomIndex(poolCopy.length);
+        keys.push(poolCopy[idx]);
+        poolCopy.splice(idx, 1);
+      }
+      showWinners(keys);
+      keys.forEach((k) => excluded.add(k));
+      drawing = false;
+      renderEntrants();
+      return;
+    }
+
+    animState = 'spinup';
+    stateStart = performance.now();
+
+    const checkDone = setInterval(() => {
+      if (animState === 'done'){
+        clearInterval(checkDone);
+        winnerKeys.forEach((k) => excluded.add(k));
+        drawing = false;
+        renderEntrants();
+      }
+    }, 100);
+  });
+
+  /* ---------------- отдельное плавающее окно "слова победителя" на каждого ---------------- */
+
+  function makeDraggable(panel, handle){
+    let dragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0;
+
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.close-x')) return;
+      dragging = true;
+      handle.setPointerCapture(e.pointerId);
+      const rect = panel.getBoundingClientRect();
+      startX = e.clientX;
+      startY = e.clientY;
+      origLeft = rect.left;
+      origTop = rect.top;
+    });
+
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      const w = panel.offsetWidth, h = panel.offsetHeight;
+      let left = origLeft + dx;
+      let top = origTop + dy;
+      left = Math.max(4, Math.min(window.innerWidth - w - 4, left));
+      top = Math.max(4, Math.min(window.innerHeight - h - 4, top));
+      panel.style.left = Math.round(left) + 'px';
+      panel.style.top = Math.round(top) + 'px';
+      panel.style.right = 'auto';
+    });
+
+    function endDrag(e){
+      if (!dragging) return;
+      dragging = false;
+      try { handle.releasePointerCapture(e.pointerId); } catch(err){}
+    }
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+  }
+
+  function openReactionWindow(key, index){
+    const displayName = entrants.get(key) || key;
+
+    const panel = document.createElement('div');
+    panel.className = 'panel winner-reactions show';
+
+    const h2 = document.createElement('h2');
+    h2.appendChild(document.createTextNode('слова победителя — '));
+    const nameSpan = document.createElement('span');
+    nameSpan.style.color = 'var(--gold)';
+    nameSpan.textContent = displayName;
+    h2.appendChild(nameSpan);
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'ghost close-x';
+    closeBtn.title = 'закрыть';
+    closeBtn.textContent = '✕';
+    h2.appendChild(closeBtn);
+    panel.appendChild(h2);
+
+    const timerEl = document.createElement('div');
+    timerEl.className = 'rw-timer';
+    const timerDot = document.createElement('span');
+    timerDot.className = 'rw-dot';
+    timerEl.appendChild(timerDot);
+    const timerText = document.createElement('span');
+    timerText.textContent = '00:00 — ждём ответ';
+    timerEl.appendChild(timerText);
+    panel.appendChild(timerEl);
+
+    const feed = document.createElement('div');
+    feed.className = 'feed';
+    panel.appendChild(feed);
+
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = 'ждём, что победитель напишет после выигрыша…';
+    panel.appendChild(hint);
+
+    document.body.appendChild(panel);
+
+    const startTime = performance.now();
+    const timerInterval = setInterval(() => {
+      timerText.textContent = formatElapsed(performance.now() - startTime) + ' — ждём ответ';
+    }, 250);
+
+    const w = Math.min(400, Math.round(window.innerWidth * 0.9));
+    const cascade = index * 30;
+    panel.style.width = w + 'px';
+    panel.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, Math.round((window.innerWidth - w) / 2) + cascade)) + 'px';
+    panel.style.top = Math.max(8, 90 + cascade) + 'px';
+
+    closeBtn.addEventListener('click', () => {
+      clearInterval(timerInterval);
+      panel.remove();
+      reactionWindows.delete(key);
+    });
+
+    makeDraggable(panel, h2);
+    reactionWindows.set(key, { panel, feed, hint, timerEl, timerText, startTime, timerInterval, stopped: false });
+  }
+
+  function formatElapsed(ms){
+    const totalSec = Math.max(0, Math.floor(ms / 1000));
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  function closeAllReactionWindows(){
+    reactionWindows.forEach(({ panel, timerInterval }) => {
+      clearInterval(timerInterval);
+      panel.remove();
+    });
+    reactionWindows.clear();
+  }
+
+  window.addEventListener('resize', () => {
+    reactionWindows.forEach(({ panel }) => {
+      const rect = panel.getBoundingClientRect();
+      let left = Math.min(rect.left, window.innerWidth - rect.width - 4);
+      let top = Math.min(rect.top, window.innerHeight - rect.height - 4);
+      left = Math.max(4, left);
+      top = Math.max(4, top);
+      panel.style.left = Math.round(left) + 'px';
+      panel.style.top = Math.round(top) + 'px';
+    });
+  });
+
+  /* ---------------- декоративная огромная галактика справа ---------------- */
+  /* чисто визуальная, без рамки, вплотную к краю экрана: красивая туманность/спираль,
+     пустые белые точки фона и ники участников в прозрачных капсулах */
+  (function initDecorGalaxy(){
+    const canvas2 = document.getElementById('galaxy2');
+    if (!canvas2) return;
+    const ctx2 = canvas2.getContext('2d');
+    const wrap2 = canvas2.parentElement;
+    let W2 = 0, H2 = 0, DPR2 = Math.max(1, window.devicePixelRatio || 1);
+
+    let bgStars2 = [];
+    let dust2 = [];             // мелкая пыль спиральных рукавов, чисто декоративная
+    let nameDots2 = new Map();  // key -> star (только для участников, с ником)
+    let rotation2 = 0;
+
+    function resizeCanvas2(){
+      W2 = wrap2.clientWidth;
+      H2 = wrap2.clientHeight;
+      if (!W2 || !H2) return;
+      canvas2.width = W2 * DPR2;
+      canvas2.height = H2 * DPR2;
+      ctx2.setTransform(DPR2, 0, 0, DPR2, 0, 0);
+      const count = Math.max(160, Math.min(460, Math.round((W2 * H2) / 1400)));
+      bgStars2 = new Array(count).fill(0).map(makeBgStar2);
+      const dustCount = Math.max(260, Math.min(900, Math.round((W2 * H2) / 550)));
+      dust2 = new Array(dustCount).fill(0).map(makeDust2);
+    }
+    window.addEventListener('resize', resizeCanvas2);
+
+    function makeBgStar2(){
+      return {
+        angle: Math.random() * Math.PI * 2,
+        radius: 10 + Math.random() * (Math.min(W2, H2) * 0.6),
+        speed: 0.02 + Math.random() * 0.045,
+        size: 0.5 + Math.random() * 1.5,
+        osc: 0.3 + Math.random() * 0.5,
+        phase: Math.random() * Math.PI * 2,
+        alpha: 0.2 + Math.random() * 0.6,
+      };
+    }
+
+    // точки, разбросанные вдоль спиральных рукавов — создают "фото" туманности
+    function makeDust2(){
+      const arm = Math.floor(Math.random() * 2);          // 2 рукава
+      const t = Math.random();                             // положение вдоль рукава 0..1
+      const armSpread = (Math.random() - 0.5) * 0.55;       // разброс поперёк рукава
+      const baseColors = ['#cfe0ff', '#e9d8ff', '#ffffff', '#ffe9c7', '#bcd4ff'];
+      return {
+        arm, t, armSpread,
+        drift: 0.15 + Math.random() * 0.25,
+        size: 0.5 + Math.random() * 1.3,
+        alpha: 0.12 + Math.random() * 0.35,
+        color: baseColors[Math.floor(Math.random() * baseColors.length)],
+        phase: Math.random() * Math.PI * 2,
+      };
+    }
+
+    function makeNameDot2(){
+      return {
+        angle: Math.random() * Math.PI * 2,
+        radius: 20 + Math.random() * (Math.min(W2, H2) * 0.5),
+        speed: 0.04 + Math.random() * 0.045,
+        size: 2 + Math.random() * 2,
+        osc: 0.4 + Math.random() * 0.6,
+        phase: Math.random() * Math.PI * 2,
+        color: palette[Math.floor(Math.random() * palette.length)],
+        alpha: 0.65 + Math.random() * 0.3,
+      };
+    }
+
+    function syncNameDots2(){
+      entrants.forEach((_, key) => {
+        if (!nameDots2.has(key)) nameDots2.set(key, makeNameDot2());
+      });
+      nameDots2.forEach((_, key) => {
+        if (!entrants.has(key)) nameDots2.delete(key);
+      });
+    }
+
+    function cx2(){ return W2 * 0.62; }   // ядро галактики смещено чуть правее — эффект "продолжается за экран"
+    function cy2(){ return H2 * 0.46; }
+
+    // рисуем точку спирального рукава по параметрическому уравнению logarithmic spiral
+    function spiralPoint(gx, gy, R, arm, t, spread, rot){
+      const a = arm * Math.PI + t * Math.PI * 2.6 + rot;
+      const r = R * (0.06 + t * 0.98);
+      const wob = spread * R * 0.16 * (1 - t * 0.4);
+      const x = gx + Math.cos(a) * r + Math.cos(a + Math.PI / 2) * wob;
+      const y = gy + (Math.sin(a) * r + Math.sin(a + Math.PI / 2) * wob) * 0.55;
+      return { x, y };
+    }
+
+    function frame2(t){
+      if (!W2 || !H2){ requestAnimationFrame(frame2); return; }
+      syncNameDots2();
+      rotation2 += 0.00012 * 16;
+
+      ctx2.clearRect(0, 0, W2, H2);
+      const gx = cx2(), gy = cy2();
+      const R = Math.min(W2, H2) * 0.72;
+
+      // ядро — яркое мягкое свечение
+      const core = ctx2.createRadialGradient(gx, gy, 0, gx, gy, R * 0.5);
+      core.addColorStop(0, 'rgba(255,246,225,0.35)');
+      core.addColorStop(0.25, 'rgba(210,200,255,0.14)');
+      core.addColorStop(0.6, 'rgba(140,160,255,0.05)');
+      core.addColorStop(1, 'rgba(140,160,255,0)');
+      ctx2.save();
+      ctx2.fillStyle = core;
+      ctx2.beginPath();
+      ctx2.arc(gx, gy, R * 0.5, 0, Math.PI * 2);
+      ctx2.fill();
+      ctx2.restore();
+
+      // спиральные рукава — облако мелкой пыли по параметрической спирали
+      dust2.forEach((d) => {
+        const tt = (d.t + rotation2 * d.drift * 0.02) % 1;
+        const pt = spiralPoint(gx, gy, R, d.arm, tt, d.armSpread, rotation2 * 0.4);
+        const distFromCore = tt;
+        const alpha = d.alpha * (0.35 + (1 - distFromCore) * 0.5);
+        drawStar2(pt.x, pt.y, d.size, d.color, alpha, 2 + d.size);
+      });
+
+      // просто пустые точки фона (декоративные звёзды)
+      bgStars2.forEach((s) => {
+        s.angle += s.speed * (16 / 1000);
+        const r = s.radius + Math.sin(t / 1000 * s.osc + s.phase) * 3;
+        const x = gx + Math.cos(s.angle) * r;
+        const y = gy + Math.sin(s.angle) * r * 0.5;
+        const depth = (Math.sin(s.angle) * 0.5 + 0.5);
+        const size = s.size * (0.7 + depth * 0.6);
+        const alpha = s.alpha * (0.5 + depth * 0.5);
+        drawStar2(x, y, size, '#ffffff', alpha, 3 + size * 2);
+      });
+
+      // участники — цветная точка + ник в прозрачной капсуле
+      nameDots2.forEach((s, key) => {
+        s.angle += s.speed * (16 / 1000);
+        const r = s.radius + Math.sin(t / 1000 * s.osc + s.phase) * 4;
+        const x = gx + Math.cos(s.angle) * r;
+        const y = gy + Math.sin(s.angle) * r * 0.5;
+        const depth = (Math.sin(s.angle) * 0.5 + 0.5);
+        const size = s.size * (0.7 + depth * 0.8);
+        const alpha = s.alpha * (0.5 + depth * 0.5);
+        drawStar2(x, y, size, s.color, alpha, 12 + size * 2);
+
+        const label = entrants.get(key);
+        if (label) drawNamePill2(x, y - size - 8, label, Math.min(0.85, alpha + 0.2), s.color);
+      });
+
+      requestAnimationFrame(frame2);
+    }
+
+    function drawStar2(x, y, size, color, alpha, glowBlur){
+      ctx2.save();
+      ctx2.globalAlpha = Math.max(0, alpha);
+      if (glowBlur){
+        ctx2.shadowColor = color;
+        ctx2.shadowBlur = glowBlur;
+      }
+      ctx2.fillStyle = color;
+      ctx2.beginPath();
+      ctx2.arc(x, y, size, 0, Math.PI * 2);
+      ctx2.fill();
+      ctx2.restore();
+    }
+
+    // ник в маленькой прозрачной капсуле (скруглённая рамочка), чисто декоративно
+    function drawNamePill2(x, y, text, alpha, accent){
+      ctx2.save();
+      ctx2.font = '10px "IBM Plex Mono", monospace';
+      ctx2.textAlign = 'center';
+      ctx2.textBaseline = 'middle';
+      const padX = 7, padY = 4;
+      const textW = ctx2.measureText(text).width;
+      const w = textW + padX * 2, h = 16 + padY;
+      const rx = x - w / 2, ry = y - h - 4;
+      const radius = h / 2;
+
+      ctx2.globalAlpha = alpha * 0.55;
+      ctx2.fillStyle = 'rgba(10,12,18,0.35)';
+      ctx2.strokeStyle = accent;
+      ctx2.lineWidth = 1;
+      ctx2.beginPath();
+      ctx2.moveTo(rx + radius, ry);
+      ctx2.arcTo(rx + w, ry, rx + w, ry + h, radius);
+      ctx2.arcTo(rx + w, ry + h, rx, ry + h, radius);
+      ctx2.arcTo(rx, ry + h, rx, ry, radius);
+      ctx2.arcTo(rx, ry, rx + w, ry, radius);
+      ctx2.closePath();
+      ctx2.fill();
+      ctx2.globalAlpha = alpha * 0.4;
+      ctx2.stroke();
+
+      ctx2.globalAlpha = alpha;
+      ctx2.fillStyle = '#eef1f6';
+      ctx2.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx2.shadowBlur = 3;
+      ctx2.fillText(text, rx + w / 2, ry + h / 2 + 1);
+      ctx2.restore();
+    }
+
+    resizeCanvas2();
+    requestAnimationFrame(frame2);
+  })();
+
+  renderEntrants();
+})();
+</script>
+</body>
+</html>
