@@ -1156,7 +1156,6 @@
   connectToChannel();
 
   el.resetBtn.addEventListener('click', () => {
-    if (!confirm('Вы уверены что хотите сбросить участников розыгрыша?')) return;
     entrants.clear();
     entrantMessages.clear();
     excluded.clear();
