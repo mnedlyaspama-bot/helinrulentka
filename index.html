@@ -213,7 +213,7 @@
 
   .settings-cell{ grid-area:settings; }
   .stage-cell{ grid-area:stage; padding:0; overflow:hidden; }
-  .history-cell{ grid-area:history; max-height:none; }
+  .history-cell{ grid-area:history; overflow:hidden; }
 
   /* stage (galaxy + draw controls) */
   .stage-cell{
@@ -288,6 +288,79 @@
     overflow-wrap:break-word;
   }
 
+  /* roulette — merged shimmering star spins into a nickname reel */
+  .roulette-overlay{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%, -50%);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.35s ease;
+    z-index:2;
+  }
+  .roulette-overlay.show{ opacity:1; }
+  .roulette-tag{
+    font-family:var(--mono);
+    font-size:11.5px;
+    color:var(--gold);
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+  }
+  .roulette-window{
+    position:relative;
+    width:min(74vw, 260px);
+    height:132px;
+    overflow:hidden;
+    border-radius:16px;
+    background:rgba(9,11,17,0.65);
+    border:1px solid rgba(255,255,255,0.12);
+    box-shadow:0 0 30px rgba(255,209,102,0.18);
+    backdrop-filter:blur(2px);
+  }
+  .roulette-track{
+    position:absolute;
+    left:0; right:0; top:0;
+    display:flex;
+    flex-direction:column;
+  }
+  .roulette-row{
+    height:44px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:var(--display);
+    font-weight:700;
+    font-size:17px;
+    color:#fff;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    padding:0 12px;
+    text-shadow:0 0 12px rgba(255,255,255,0.35);
+  }
+  .roulette-highlight{
+    position:absolute;
+    left:1px; right:1px; top:50%;
+    height:44px;
+    transform:translateY(-50%);
+    border-top:1px solid rgba(255,209,102,0.55);
+    border-bottom:1px solid rgba(255,209,102,0.55);
+    background:linear-gradient(180deg, rgba(255,209,102,0.02), rgba(255,209,102,0.11), rgba(255,209,102,0.02));
+    pointer-events:none;
+  }
+  .roulette-window::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:linear-gradient(180deg, rgba(9,11,17,0.95), rgba(9,11,17,0) 30%, rgba(9,11,17,0) 70%, rgba(9,11,17,0.95));
+    pointer-events:none;
+  }
+
   .stage-foot{
     display:flex;
     align-items:center;
@@ -349,15 +422,18 @@
     border-radius:8px;
     flex:none;
   }
-  .history-list{
+  .history-list-wrap{
     flex:1;
-    height:0;
+    position:relative;
+    min-height:0;
+  }
+  .history-list{
+    position:absolute;
+    inset:0;
     overflow-y:auto;
     display:flex;
     flex-direction:column;
     gap:9px;
-    margin-top:2px;
-    min-height:0;
   }
   .history-list::-webkit-scrollbar{width:6px;}
   .history-list::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
@@ -474,6 +550,13 @@
   .feed-line .u{color:var(--violet);}
   .feed-line.match{color:var(--gold);}
   .feed-line.match .u{color:var(--gold);}
+  .feed-line .emote{
+    display:inline-block;
+    height:1.5em;
+    width:auto;
+    vertical-align:middle;
+    margin:-3px 1px;
+  }
   .feed::-webkit-scrollbar{width:7px;}
   .feed::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
 
@@ -497,6 +580,41 @@
   }
   .winner-reactions .feed-line .u{ color:var(--gold); }
   .winner-reactions .feed-line{ font-size:14px; }
+  .rw-active-name{ color:var(--gold); }
+  .rw-tabs{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin:-4px 0 12px;
+  }
+  .rw-tab{
+    font-family:var(--mono);
+    font-size:12px;
+    padding:6px 12px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:transparent;
+    color:var(--muted);
+    cursor:pointer;
+  }
+  .rw-tab:hover{ color:var(--text); border-color:rgba(255,255,255,0.25); }
+  .rw-tab.active{
+    background:var(--gold);
+    border-color:var(--gold);
+    color:#2b2308;
+    font-weight:600;
+  }
+  .rw-nav{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    margin-top:12px;
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--muted);
+  }
+  .rw-page{ min-width:44px; text-align:center; }
   .winner-reactions h2{
     font-size:13px;
     color:var(--muted);
@@ -644,6 +762,13 @@
             <div class="tag" id="winnerTag">ПОБЕДИТЕЛЬ</div>
             <div class="winners-list" id="winnersList"></div>
           </div>
+          <div class="roulette-overlay" id="rouletteOverlay">
+            <div class="roulette-tag" id="rouletteTag">определяем победителя</div>
+            <div class="roulette-window">
+              <div class="roulette-track" id="rouletteTrack"></div>
+              <div class="roulette-highlight"></div>
+            </div>
+          </div>
         </div>
         <div class="stage-foot">
           <button class="primary" id="drawBtn" disabled>Крутить</button>
@@ -656,8 +781,10 @@
           <h2>история победителей</h2>
           <button type="button" class="ghost small" id="clearHistoryBtn">очистить</button>
         </div>
-        <div class="history-list" id="historyList">
-          <div class="history-empty">пока никто не выигрывал</div>
+        <div class="history-list-wrap">
+          <div class="history-list" id="historyList">
+            <div class="history-empty">пока никто не выигрывал</div>
+          </div>
         </div>
         <div class="history-hint">хранится только в этом браузере</div>
       </div>
@@ -705,13 +832,16 @@
     winnersList: document.getElementById('winnersList'),
     historyList: document.getElementById('historyList'),
     clearHistoryBtn: document.getElementById('clearHistoryBtn'),
+    rouletteOverlay: document.getElementById('rouletteOverlay'),
+    rouletteTag: document.getElementById('rouletteTag'),
+    rouletteTrack: document.getElementById('rouletteTrack'),
   };
 
   let ws = null;
   let entrants = new Map();   // key(lower) -> displayName
   let entrantMessages = new Map(); // key(lower) -> последнее сообщение со словом для участия
   let excluded = new Set();
-  let reactionWindows = new Map(); // key(lower) -> { panel, feed, hint } — отдельное плавающее окно на победителя
+  let reactionPanel = null; // единая плавающая панель "слова победителя" с вкладками на всех победителей
   let drawing = false;
 
   /* ---------------- история победителей (хранится в этом браузере) ---------------- */
@@ -796,6 +926,33 @@
     el.statusDetail.textContent = detail || '';
   }
 
+  // Kick присылает эмодзи в тексте сообщения как токены вида [emote:12345:PogU] —
+  // разбираем их и подставляем картинку с CDN Kick вместо кода.
+  const EMOTE_RE = /\[emote:(\d+):([^\]]+)\]/g;
+
+  function appendMessageContent(container, content){
+    EMOTE_RE.lastIndex = 0;
+    let lastIndex = 0;
+    let match;
+    while ((match = EMOTE_RE.exec(content))){
+      if (match.index > lastIndex){
+        container.appendChild(document.createTextNode(content.slice(lastIndex, match.index)));
+      }
+      const img = document.createElement('img');
+      img.className = 'emote';
+      img.src = 'https://files.kick.com/emotes/' + match[1] + '/fullsize';
+      img.alt = match[2];
+      img.title = match[2];
+      img.loading = 'lazy';
+      img.onerror = () => { img.replaceWith(document.createTextNode(match[2])); };
+      container.appendChild(img);
+      lastIndex = EMOTE_RE.lastIndex;
+    }
+    if (lastIndex < content.length){
+      container.appendChild(document.createTextNode(content.slice(lastIndex)));
+    }
+  }
+
   function logLine(username, content, isMatch){
     const line = document.createElement('div');
     line.className = 'feed-line' + (isMatch ? ' match' : '');
@@ -803,33 +960,28 @@
     u.className = 'u';
     u.textContent = username + ': ';
     line.appendChild(u);
-    line.appendChild(document.createTextNode(content));
+    appendMessageContent(line, content);
     el.feed.appendChild(line);
     el.feed.scrollTop = el.feed.scrollHeight;
     while (el.feed.childNodes.length > 300) el.feed.removeChild(el.feed.firstChild);
   }
 
   function logWinnerReaction(username, content){
-    const rw = reactionWindows.get(username.toLowerCase());
-    if (!rw) return;
-    rw.hint.style.display = 'none';
-    if (!rw.stopped){
-      rw.stopped = true;
-      clearInterval(rw.timerInterval);
-      const elapsed = formatElapsed(performance.now() - rw.startTime);
-      rw.timerText.textContent = elapsed + ' — ответил(а)';
-      rw.timerEl.classList.add('done');
+    if (!reactionPanel) return;
+    const key = username.toLowerCase();
+    const idx = reactionPanel.winners.findIndex(w => w.key === key);
+    if (idx === -1) return;
+    const w = reactionPanel.winners[idx];
+    if (!w.stopped){
+      w.stopped = true;
+      w.elapsedAtStop = performance.now() - w.startTime;
     }
-    const line = document.createElement('div');
-    line.className = 'feed-line';
-    const u = document.createElement('span');
-    u.className = 'u';
-    u.textContent = username + ': ';
-    line.appendChild(u);
-    line.appendChild(document.createTextNode(content));
-    rw.feed.appendChild(line);
-    rw.feed.scrollTop = rw.feed.scrollHeight;
-    while (rw.feed.childNodes.length > 100) rw.feed.removeChild(rw.feed.firstChild);
+    w.messages.push({ username, content });
+    if (w.messages.length > 100) w.messages.shift();
+    if (idx === reactionPanel.activeIndex){
+      reactionPanel.renderFeed();
+      reactionPanel.updateTimer();
+    }
   }
 
   function renderEntrants(){
@@ -867,7 +1019,7 @@
     }
     logLine(username, content, isMatch);
 
-    if (reactionWindows.size){
+    if (reactionPanel){
       logWinnerReaction(username, content);
     }
 
@@ -1037,17 +1189,17 @@
 
   const particles = new Map(); // key -> particle (участники розыгрыша, цветные)
   let bgStars = [];            // декоративные белые звёзды фона
-  let animState = 'idle';      // idle | gather | burst | done
+  let animState = 'idle';      // idle | gather | merged | roulette | done
   let stateStart = 0;
   let speedMul = 1;
   let winnerKeys = [];
-  let winnerParticles = [];
-  let launchOrigins = [];
   let currentDrawCount = 1;
 
   const GATHER_MS = 1500;
   const HOLD_MS = 180;
-  const BURST_MS = 1400;
+  const ROULETTE_MS = 4000;   // одна прокрутка рулетки на одного победителя
+  const ROULETTE_PAUSE_MS = 650; // пауза между прокрутками, если победителей несколько
+  const ROULETTE_ROW_H = 44;
 
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -1074,7 +1226,6 @@
       p.enterFrom.x *= sx;
       p.enterFrom.y *= sy;
     });
-    launchOrigins.forEach(p => { p.x *= sx; p.y *= sy; });
     W = nextW; H = nextH; DPR = nextDPR;
     canvas.width = Math.round(W * DPR);
     canvas.height = Math.round(H * DPR);
@@ -1154,33 +1305,16 @@
     ctx.restore();
   }
 
-  function drawNameLabel(x, y, size, text, alpha, color){
-    ctx.save();
-    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-    ctx.fillStyle = color || '#eef1f6';
-    ctx.font = '10px "IBM Plex Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-    ctx.shadowBlur = 4;
-    ctx.fillText(text, x, y - size - 5);
-    ctx.restore();
-  }
-
   function smoothStep(p){ return p * p * (3 - 2 * p); }
 
   // Transform both the decorative stars and participant dots together.
+  // Nicknames are intentionally never drawn on this canvas — the roulette overlay shows names instead.
   function flowPosition(x, y, progress){
     let scale = 1, turn = 0;
     if (animState === 'gather'){
       const p = smoothStep(progress);
       scale = 1 - p * .988;
       turn = p * .7;
-    } else if (animState === 'burst'){
-      scale = progress < .62
-        ? .012 + 1.48 * easeOutCubic(progress / .62)
-        : 1.492 - .492 * smoothStep((progress - .62) / .38);
-      turn = .7 * (1 - smoothStep(progress));
     }
     const dx = x - cx(), dy = (y - cy()) * 2;
     return {
@@ -1189,11 +1323,10 @@
     };
   }
 
-  function finishDraw(){
+  function finishAfterRoulette(){
     animState = 'done';
     winnerKeys.forEach(k => excluded.add(k));
     drawing = false;
-    reactionWindows.forEach(rw => { rw.panel.style.visibility = ''; });
     renderEntrants();
   }
 
@@ -1205,22 +1338,29 @@
     let progress = 0;
     if (animState === 'gather'){
       progress = Math.min(1, (now - stateStart) / GATHER_MS);
-      if (now - stateStart >= GATHER_MS + HOLD_MS){ beginLaunch(now); progress = 0; }
-    } else if (animState === 'burst'){
-      progress = Math.min(1, (now - stateStart) / BURST_MS);
-      if (progress >= .32 && !el.winnerOverlay.classList.contains('show')) showWinners(winnerKeys, true);
-      if (progress >= 1) finishDraw();
+      if (now - stateStart >= GATHER_MS + HOLD_MS){ beginReveal(now); progress = 1; }
     }
 
-    const active = animState === 'gather' || animState === 'burst';
-    const fade = animState === 'done' ? .32 : animState === 'burst' ? 1 - progress * .68 : 1;
-    const labelFade = active ? (animState === 'gather' ? Math.max(0,1 - progress * 3) : 0) : (animState === 'done' ? .12 : .6);
     drawMilkyWayBand(cx(),cy());
 
+    if (animState === 'merged' || animState === 'roulette'){
+      // все звёзды слились в одну — вместо взрыва она мерцает и переливается
+      // разными цветами, из неё же "вырастает" рулетка с никами участников
+      const hue = (now / 9) % 360;
+      const pulse = 4 + Math.sin(now / 260) * 1.4;
+      drawStar(cx(), cy(), pulse * 2.6, 'hsl(' + ((hue + 40) % 360) + ',90%,72%)', 0.16, 60);
+      drawStar(cx(), cy(), pulse * 1.5, 'hsl(' + ((hue + 20) % 360) + ',92%,74%)', 0.38, 44);
+      drawStar(cx(), cy(), pulse, 'hsl(' + hue + ',95%,76%)', 0.95, 30);
+      requestAnimationFrame(frame);
+      return;
+    }
+
+    const active = animState === 'gather';
+    const fade = animState === 'done' ? .32 : 1;
+
     if (active){
-      const gathering = animState === 'gather';
-      const radius = gathering ? 8 + progress * 22 : 12 + easeOutCubic(progress) * Math.min(W,H) * .46;
-      const alpha = gathering ? smoothStep(progress) * .15 : Math.pow(1 - progress,2) * .18;
+      const radius = 8 + progress * 22;
+      const alpha = smoothStep(progress) * .15;
       const glow = ctx.createRadialGradient(cx(),cy(),0,cx(),cy(),radius);
       glow.addColorStop(0, 'rgba(230,235,255,' + alpha + ')');
       glow.addColorStop(1, 'rgba(200,210,255,0)');
@@ -1253,7 +1393,6 @@
         if (ep >= 1) p.entering = false;
       }
       drawStar(pos.x,pos.y,size,p.color,alpha,12);
-      if (labelFade > 0) drawNameLabel(pos.x,pos.y,size,entrants.get(p.key) || p.key,labelFade,p.color);
       p._x = pos.x; p._y = pos.y;
     });
     requestAnimationFrame(frame);
@@ -1282,16 +1421,15 @@
   function hideWinner(){
     el.winnerOverlay.classList.remove('show');
     el.winnersList.innerHTML = '';
+    el.rouletteOverlay.classList.remove('show');
     winnerKeys = [];
-    winnerParticles = [];
-    launchOrigins = [];
     animState = 'idle';
     drawing = false;
 
     closeAllReactionWindows();
   }
 
-  function showWinners(keys, deferReactions = false){
+  function showWinners(keys){
     el.winnerTag.textContent = keys.length > 1 ? 'ПОБЕДИТЕЛИ' : 'ПОБЕДИТЕЛЬ';
     el.winnersList.innerHTML = '';
     keys.forEach((key) => {
@@ -1306,15 +1444,16 @@
     });
     el.winnerOverlay.classList.add('show');
 
-    // отдельное плавающее окно на каждого победителя — так видно реакцию каждого
-    keys.forEach((key, i) => openReactionWindow(key, i));
-    if (deferReactions) reactionWindows.forEach(rw => { rw.panel.style.visibility = 'hidden'; });
+    // единая плавающая панель "слова победителя" с вкладкой на каждого
+    createReactionPanel(keys);
 
     addHistoryEntries(keys);
   }
 
-  function beginLaunch(now){
-    animState = 'burst';
+  // После сближения все звёзды становятся одной мерцающей точкой (см. frame()),
+  // и уже из неё раскручивается рулетка с никами — по одному прогону на победителя.
+  function beginReveal(now){
+    animState = 'merged';
     stateStart = now;
     const pool = eligibleEntrants();
     const count = Math.max(1, Math.min(pool.length, currentDrawCount));
@@ -1325,12 +1464,76 @@
       winnerKeys.push(poolCopy[idx]);
       poolCopy.splice(idx, 1);
     }
-    winnerParticles = winnerKeys.map((key) => {
-      let wp = particles.get(key);
-      if (!wp){ wp = makeParticle(key, true); particles.set(key, wp); }
-      return wp;
-    });
-    launchOrigins = winnerParticles.map((wp) => ({ x: wp._x || cx(), y: wp._y || cy() }));
+    setTimeout(() => runRouletteSequence(winnerKeys), 260);
+  }
+
+  function rouletteNamePool(){
+    const names = [];
+    entrants.forEach((name) => names.push(name));
+    if (!names.length) names.push('???');
+    return names;
+  }
+
+  function buildRouletteReel(targetName){
+    const pool = rouletteNamePool();
+    const totalRows = 26;
+    const rows = [];
+    for (let i = 0; i < totalRows - 1; i++){
+      rows.push(pool[Math.floor(Math.random() * pool.length)]);
+    }
+    rows.push(targetName); // предпоследняя строка — победитель, останавливаемся точно на ней
+    rows.push(pool[Math.floor(Math.random() * pool.length)]); // ещё одна строка снизу — будто не докрутило
+    return rows;
+  }
+
+  function runRouletteSequence(keys){
+    animState = 'roulette';
+    el.rouletteOverlay.classList.add('show');
+
+    let i = 0;
+    function spinNext(){
+      if (i >= keys.length){
+        el.rouletteOverlay.classList.remove('show');
+        showWinners(winnerKeys);
+        finishAfterRoulette();
+        return;
+      }
+      const key = keys[i];
+      const displayName = entrants.get(key) || key;
+      el.rouletteTag.textContent = keys.length > 1
+        ? ('определяем победителя ' + (i + 1) + ' из ' + keys.length)
+        : 'определяем победителя';
+
+      const rows = buildRouletteReel(displayName);
+      el.rouletteTrack.innerHTML = '';
+      rows.forEach((name) => {
+        const row = document.createElement('div');
+        row.className = 'roulette-row';
+        row.textContent = name;
+        el.rouletteTrack.appendChild(row);
+      });
+
+      // окно рулетки показывает 3 строки — победитель (предпоследняя строка) должен
+      // оказаться ровно в центральном слоте, а под ним останется ещё одно имя —
+      // как будто рулетка чуть-чуть не докрутила
+      const finalOffset = (rows.length - 3) * ROULETTE_ROW_H;
+      el.rouletteTrack.style.transform = 'translateY(0px)';
+
+      const start = performance.now();
+      function step(now){
+        const p = Math.min(1, (now - start) / ROULETTE_MS);
+        const eased = 1 - Math.pow(1 - p, 4); // резко разгоняется, плавно тормозит к финалу
+        el.rouletteTrack.style.transform = 'translateY(' + (-finalOffset * eased) + 'px)';
+        if (p < 1){
+          requestAnimationFrame(step);
+        } else {
+          i++;
+          setTimeout(spinNext, ROULETTE_PAUSE_MS);
+        }
+      }
+      requestAnimationFrame(step);
+    }
+    spinNext();
   }
 
   el.drawBtn.addEventListener('click', () => {
@@ -1365,7 +1568,7 @@
 
   });
 
-  /* ---------------- отдельное плавающее окно "слова победителя" на каждого ---------------- */
+  /* ---------------- единая плавающая панель "слова победителя" (вкладка на каждого) ---------------- */
 
   function makeDraggable(panel, handle){
     let dragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0;
@@ -1404,8 +1607,17 @@
     handle.addEventListener('pointercancel', endDrag);
   }
 
-  function openReactionWindow(key, index){
-    const displayName = entrants.get(key) || key;
+  function createReactionPanel(keys){
+    closeAllReactionWindows();
+
+    const winners = keys.map((key) => ({
+      key,
+      displayName: entrants.get(key) || key,
+      startTime: performance.now(),
+      stopped: false,
+      elapsedAtStop: 0,
+      messages: [],
+    }));
 
     const panel = document.createElement('div');
     panel.className = 'panel winner-reactions show';
@@ -1413,8 +1625,7 @@
     const h2 = document.createElement('h2');
     h2.appendChild(document.createTextNode('слова победителя — '));
     const nameSpan = document.createElement('span');
-    nameSpan.style.color = 'var(--gold)';
-    nameSpan.textContent = displayName;
+    nameSpan.className = 'rw-active-name';
     h2.appendChild(nameSpan);
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
@@ -1423,6 +1634,18 @@
     closeBtn.textContent = '✕';
     h2.appendChild(closeBtn);
     panel.appendChild(h2);
+
+    const tabs = document.createElement('div');
+    tabs.className = 'rw-tabs';
+    const tabEls = winners.map((w) => {
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = 'rw-tab';
+      tab.textContent = w.displayName;
+      tabs.appendChild(tab);
+      return tab;
+    });
+    panel.appendChild(tabs);
 
     const timerEl = document.createElement('div');
     timerEl.className = 'rw-timer';
@@ -1443,27 +1666,77 @@
     hint.textContent = 'ждём, что победитель напишет после выигрыша…';
     panel.appendChild(hint);
 
+    const nav = document.createElement('div');
+    nav.className = 'rw-nav';
+    const prevBtn = document.createElement('button');
+    prevBtn.type = 'button'; prevBtn.className = 'ghost small'; prevBtn.textContent = 'PREV';
+    const pageInd = document.createElement('span');
+    pageInd.className = 'rw-page';
+    const nextBtn = document.createElement('button');
+    nextBtn.type = 'button'; nextBtn.className = 'ghost small'; nextBtn.textContent = 'NEXT';
+    nav.appendChild(prevBtn); nav.appendChild(pageInd); nav.appendChild(nextBtn);
+    panel.appendChild(nav);
+    if (winners.length <= 1) nav.style.display = 'none';
+
     document.body.appendChild(panel);
 
-    const startTime = performance.now();
-    const timerInterval = setInterval(() => {
-      timerText.textContent = formatElapsed(performance.now() - startTime) + ' — ждём ответ';
-    }, 250);
+    reactionPanel = { panel, winners, activeIndex: 0, tickInterval: null, renderFeed: null, updateTimer: null };
 
-    const w = Math.min(400, Math.round(window.innerWidth * 0.9));
-    const cascade = index * 30;
+    function renderFeed(){
+      const w = winners[reactionPanel.activeIndex];
+      feed.innerHTML = '';
+      w.messages.forEach((m) => {
+        const line = document.createElement('div');
+        line.className = 'feed-line';
+        const u = document.createElement('span');
+        u.className = 'u';
+        u.textContent = m.username + ': ';
+        line.appendChild(u);
+        appendMessageContent(line, m.content);
+        feed.appendChild(line);
+      });
+      feed.scrollTop = feed.scrollHeight;
+      hint.style.display = w.messages.length ? 'none' : '';
+    }
+
+    function updateTimer(){
+      const w = winners[reactionPanel.activeIndex];
+      const elapsed = w.stopped ? w.elapsedAtStop : (performance.now() - w.startTime);
+      timerText.textContent = formatElapsed(elapsed) + (w.stopped ? ' — ответил(а)' : ' — ждём ответ');
+      timerEl.classList.toggle('done', w.stopped);
+    }
+
+    function setActiveIndex(idx){
+      reactionPanel.activeIndex = Math.max(0, Math.min(winners.length - 1, idx));
+      const w = winners[reactionPanel.activeIndex];
+      nameSpan.textContent = w.displayName;
+      tabEls.forEach((tab, i) => tab.classList.toggle('active', i === reactionPanel.activeIndex));
+      pageInd.textContent = (reactionPanel.activeIndex + 1) + ' / ' + winners.length;
+      renderFeed();
+      updateTimer();
+    }
+
+    reactionPanel.renderFeed = renderFeed;
+    reactionPanel.updateTimer = updateTimer;
+
+    tabEls.forEach((tab, i) => tab.addEventListener('click', () => setActiveIndex(i)));
+    prevBtn.addEventListener('click', () => setActiveIndex(reactionPanel.activeIndex - 1));
+    nextBtn.addEventListener('click', () => setActiveIndex(reactionPanel.activeIndex + 1));
+
+    const w = Math.min(420, Math.round(window.innerWidth * 0.92));
     panel.style.width = w + 'px';
-    panel.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, Math.round((window.innerWidth - w) / 2) + cascade)) + 'px';
-    panel.style.top = Math.max(8, 90 + cascade) + 'px';
+    panel.style.left = Math.max(8, window.innerWidth - w - 24) + 'px';
+    panel.style.top = '90px';
 
     closeBtn.addEventListener('click', () => {
-      clearInterval(timerInterval);
+      clearInterval(reactionPanel.tickInterval);
       panel.remove();
-      reactionWindows.delete(key);
+      reactionPanel = null;
     });
 
     makeDraggable(panel, h2);
-    reactionWindows.set(key, { panel, feed, hint, timerEl, timerText, startTime, timerInterval, stopped: false });
+    reactionPanel.tickInterval = setInterval(updateTimer, 250);
+    setActiveIndex(0);
   }
 
   function formatElapsed(ms){
@@ -1474,23 +1747,23 @@
   }
 
   function closeAllReactionWindows(){
-    reactionWindows.forEach(({ panel, timerInterval }) => {
-      clearInterval(timerInterval);
-      panel.remove();
-    });
-    reactionWindows.clear();
+    if (reactionPanel){
+      clearInterval(reactionPanel.tickInterval);
+      reactionPanel.panel.remove();
+      reactionPanel = null;
+    }
   }
 
   window.addEventListener('resize', () => {
-    reactionWindows.forEach(({ panel }) => {
-      const rect = panel.getBoundingClientRect();
-      let left = Math.min(rect.left, window.innerWidth - rect.width - 4);
-      let top = Math.min(rect.top, window.innerHeight - rect.height - 4);
-      left = Math.max(4, left);
-      top = Math.max(4, top);
-      panel.style.left = Math.round(left) + 'px';
-      panel.style.top = Math.round(top) + 'px';
-    });
+    if (!reactionPanel) return;
+    const panel = reactionPanel.panel;
+    const rect = panel.getBoundingClientRect();
+    let left = Math.min(rect.left, window.innerWidth - rect.width - 4);
+    let top = Math.min(rect.top, window.innerHeight - rect.height - 4);
+    left = Math.max(4, left);
+    top = Math.max(4, top);
+    panel.style.left = Math.round(left) + 'px';
+    panel.style.top = Math.round(top) + 'px';
   });
 
   /* ---------------- декоративная огромная галактика справа ---------------- */
