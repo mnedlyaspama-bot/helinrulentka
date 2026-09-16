@@ -1426,7 +1426,9 @@
         pos.y = p.enterFrom.y + (pos.y-p.enterFrom.y)*eased;
         if (ep >= 1) p.entering = false;
       }
-      drawGlowDot(pos.x,pos.y,size,p.color,alpha,16);
+      // широкий мягкий ореол вокруг точки — имитация реального свечения источника света
+      drawGlowDot(pos.x,pos.y,size,p.color,alpha*0.5,34 + size*5);
+      drawGlowDot(pos.x,pos.y,size,p.color,alpha,16 + size*2);
       p._x = pos.x; p._y = pos.y;
     });
     requestAnimationFrame(frame);
@@ -1453,18 +1455,48 @@
   // Вместо shadowBlur один раз на цвет рисуем спрайт-свечение (radial
   // gradient на маленьком офскрин-канвасе) и дальше просто масштабируем
   // его через drawImage — это на порядок дешевле для GPU/CPU.
+  // приводим css-цвет к rgba() с нужной альфой — нужно для плавного,
+  // многоступенчатого спада свечения (не резкий диск с ободком)
+  const colorAlphaCache = new Map();
+  function withAlpha(color, a){
+    const key = color + '|' + a;
+    let v = colorAlphaCache.get(key);
+    if (v) return v;
+    let r, g, b;
+    if (color[0] === '#'){
+      let hex = color.slice(1);
+      if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+      r = parseInt(hex.slice(0,2), 16);
+      g = parseInt(hex.slice(2,4), 16);
+      b = parseInt(hex.slice(4,6), 16);
+    } else {
+      const m = (color.match(/[\d.]+/g) || [255,255,255]);
+      [r, g, b] = m;
+    }
+    v = `rgba(${r},${g},${b},${a})`;
+    colorAlphaCache.set(key, v);
+    return v;
+  }
+
+  // Спрайт готовится один раз на цвет и кэшируется — дальше это только
+  // масштабируемый drawImage, так что более крупный/мягкий градиент не
+  // стоит ничего на кадр. Больше промежуточных стопов с плавно убывающей
+  // альфой = мягкое естественное свечение вместо жёсткого диска с ободком.
   const glowSpriteCache = new Map();
   function getGlowSprite(color){
     let sprite = glowSpriteCache.get(color);
     if (sprite) return sprite;
-    const s = 48;
+    const s = 96;
     const off = document.createElement('canvas');
     off.width = off.height = s;
     const octx = off.getContext('2d');
     const grad = octx.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
-    grad.addColorStop(0, color);
-    grad.addColorStop(0.32, color);
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    grad.addColorStop(0,    withAlpha(color, 1));
+    grad.addColorStop(0.12, withAlpha(color, 0.9));
+    grad.addColorStop(0.28, withAlpha(color, 0.45));
+    grad.addColorStop(0.5,  withAlpha(color, 0.16));
+    grad.addColorStop(0.75, withAlpha(color, 0.05));
+    grad.addColorStop(1,    withAlpha(color, 0));
     octx.fillStyle = grad;
     octx.beginPath();
     octx.arc(s/2, s/2, s/2, 0, Math.PI * 2);
@@ -2035,14 +2067,13 @@
         const depth = (Math.sin(s.angle) * 0.5 + 0.5);
         const size = s.size * (0.7 + depth * 0.8);
         const alpha = s.alpha * (0.75 + depth * 0.25);
+        // широкий мягкий ореол (имитация реального света вокруг источника)
+        drawStar2(x, y, size, s.color, alpha * 0.55, 34 + size * 5);
+        // основное свечение точки
         drawStar2(x, y, size, s.color, alpha, 16 + size * 3);
-        // яркое белое ядро поверх свечения — точка не теряется на фоне и выглядит заметнее
-        ctx2.globalAlpha = Math.min(1, alpha + 0.3);
-        ctx2.fillStyle = '#ffffff';
-        ctx2.beginPath();
-        ctx2.arc(x, y, Math.max(0.7, size * 0.4), 0, Math.PI * 2);
-        ctx2.fill();
-        ctx2.globalAlpha = 1;
+        // ядро — тоже мягкое свечение (спрайт), а не плоский залитый кружок,
+        // чтобы выглядело как настоящий источник света, а не пятно
+        drawStar2(x, y, Math.max(0.6, size * 0.35), '#ffffff', Math.min(1, alpha + 0.25), size * 1.6);
 
         const label = entrants.get(key);
         if (label) drawNamePill2(x, y - size - 8, label, Math.min(0.85, alpha + 0.2), s.color);
@@ -2056,18 +2087,48 @@
     // FPS, задержки при скролле истории и при перетаскивании окна). Вместо
     // shadowBlur один раз на цвет готовим спрайт свечения на офскрин-канве
     // и просто масштабируем его через drawImage — на порядок дешевле.
+    // приводим любой css-цвет (#hex или rgba(...)) к rgba() с нужной альфой —
+    // нужно, чтобы делать плавный, "настоящий" спад свечения (не резкий диск)
+    const colorAlphaCache2 = new Map();
+    function withAlpha2(color, a){
+      const key = color + '|' + a;
+      let v = colorAlphaCache2.get(key);
+      if (v) return v;
+      let r, g, b;
+      if (color[0] === '#'){
+        let hex = color.slice(1);
+        if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+        r = parseInt(hex.slice(0,2), 16);
+        g = parseInt(hex.slice(2,4), 16);
+        b = parseInt(hex.slice(4,6), 16);
+      } else {
+        const m = (color.match(/[\d.]+/g) || [255,255,255]);
+        [r, g, b] = m;
+      }
+      v = `rgba(${r},${g},${b},${a})`;
+      colorAlphaCache2.set(key, v);
+      return v;
+    }
+
+    // Спрайт готовится ОДИН РАЗ на цвет и кэшируется — дальше это просто
+    // drawImage с масштабированием, так что более мягкий/крупный градиент
+    // ничего не стоит на кадр. Больше промежуточных стопов с плавно убывающей
+    // альфой = мягкое естественное свечение вместо жёсткого диска с ободком.
     const glowSpriteCache2 = new Map();
     function getGlowSprite2(color){
       let sprite = glowSpriteCache2.get(color);
       if (sprite) return sprite;
-      const s = 40;
+      const s = 96;
       const off = document.createElement('canvas');
       off.width = off.height = s;
       const octx = off.getContext('2d');
       const grad = octx.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
-      grad.addColorStop(0, color);
-      grad.addColorStop(0.32, color);
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      grad.addColorStop(0,    withAlpha2(color, 1));
+      grad.addColorStop(0.12, withAlpha2(color, 0.9));
+      grad.addColorStop(0.28, withAlpha2(color, 0.45));
+      grad.addColorStop(0.5,  withAlpha2(color, 0.16));
+      grad.addColorStop(0.75, withAlpha2(color, 0.05));
+      grad.addColorStop(1,    withAlpha2(color, 0));
       octx.fillStyle = grad;
       octx.beginPath();
       octx.arc(s/2, s/2, s/2, 0, Math.PI * 2);
