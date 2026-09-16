@@ -158,10 +158,10 @@
   .cell-feed{ grid-area:feed; }
   .decor-galaxy-panel{
     position:fixed;
-    width:52vw;
-    height:min(92vh,960px);
-    right:-19vw;
-    top:100px;
+    width:64vw;
+    height:min(96vh,1100px);
+    right:-23vw;
+    top:110px;
     overflow:hidden;
     pointer-events:none;
     z-index:0;
@@ -171,7 +171,7 @@
   .wrap{ position:relative; z-index:1; }
   @media(max-width:1100px){
     .mega{ width:100%; max-width:850px; margin:0 auto; }
-    .decor-galaxy-panel{ right:-28vw; opacity:.32; }
+    .decor-galaxy-panel{ right:-36vw; opacity:.32; }
   }
   @media(max-width:700px){
     .mega-grid{
@@ -461,6 +461,12 @@
     display:flex;
     flex-direction:column;
     gap:9px;
+    /* скролл на собственном composite-слое: перерисовка фоновых канвасов
+       больше не блокирует прокрутку этого списка */
+    contain:content;
+    transform:translateZ(0);
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
   }
   .history-list::-webkit-scrollbar{width:6px;}
   .history-list::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
@@ -1294,11 +1300,11 @@
       angle,
       radiusRatio: .08 + band * .36,
       speed: 0.18 + Math.random() * 0.12,
-      size: 1.6 + Math.random() * 2.2,
+      size: 1.1 + Math.random() * 1.3,
       osc: 0.6 + Math.random() * 0.8,
       phase: Math.random() * Math.PI * 2,
       color: participantColor(key),
-      alpha: 0.55 + Math.random() * 0.4,
+      alpha: 0.82 + Math.random() * 0.18,
       entering: !silent,
       enterStart: performance.now(),
       enterDur: 650 + Math.random() * 300,
@@ -1420,7 +1426,7 @@
         pos.y = p.enterFrom.y + (pos.y-p.enterFrom.y)*eased;
         if (ep >= 1) p.entering = false;
       }
-      drawGlowDot(pos.x,pos.y,size,p.color,alpha,12);
+      drawGlowDot(pos.x,pos.y,size,p.color,alpha,16);
       p._x = pos.x; p._y = pos.y;
     });
     requestAnimationFrame(frame);
@@ -1633,18 +1639,52 @@
 
   /* ---------------- единая плавающая панель "слова победителя" (вкладка на каждого) ---------------- */
 
+  // Позиция окна "слова победителя" запоминается в этом браузере, чтобы
+  // после обновления страницы новое окно открывалось там же, где его оставили.
+  const REACTION_POS_KEY = 'kickRaffleReactionPanelPos_v1';
+
+  function saveReactionPanelPos(left, top){
+    try { localStorage.setItem(REACTION_POS_KEY, JSON.stringify({ left, top })); } catch(e){}
+  }
+
+  function loadReactionPanelPos(){
+    try {
+      const raw = localStorage.getItem(REACTION_POS_KEY);
+      if (!raw) return null;
+      const pos = JSON.parse(raw);
+      if (typeof pos.left === 'number' && typeof pos.top === 'number') return pos;
+    } catch(e){}
+    return null;
+  }
+
+  // Перетаскивание раньше двигало окно напрямую через left/top на каждое
+  // pointermove-событие — при большом числе таких событий (мышь шлёт их
+  // очень часто) это давало лишние синхронные пересчёты стиля и ощущалось
+  // как заметный лаг/подёргивание, особенно вместе с фоновой анимацией.
+  // Теперь координата курсора просто запоминается, а стиль панели
+  // обновляется не чаще одного раза за кадр через requestAnimationFrame —
+  // движение получается резким и без задержек, как перетаскивание вкладки.
   function makeDraggable(panel, handle){
     let dragging = false, startX = 0, startY = 0, origLeft = 0, origTop = 0;
+    let pendingLeft = 0, pendingTop = 0, rafScheduled = false;
+
+    function applyPending(){
+      rafScheduled = false;
+      panel.style.left = Math.round(pendingLeft) + 'px';
+      panel.style.top = Math.round(pendingTop) + 'px';
+    }
 
     handle.addEventListener('pointerdown', (e) => {
       if (e.target.closest('.close-x')) return;
       dragging = true;
       handle.setPointerCapture(e.pointerId);
+      panel.style.willChange = 'left, top';
       const rect = panel.getBoundingClientRect();
       startX = e.clientX;
       startY = e.clientY;
       origLeft = rect.left;
       origTop = rect.top;
+      panel.style.right = 'auto';
     });
 
     handle.addEventListener('pointermove', (e) => {
@@ -1652,19 +1692,20 @@
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
       const w = panel.offsetWidth, h = panel.offsetHeight;
-      let left = origLeft + dx;
-      let top = origTop + dy;
-      left = Math.max(4, Math.min(window.innerWidth - w - 4, left));
-      top = Math.max(4, Math.min(window.innerHeight - h - 4, top));
-      panel.style.left = Math.round(left) + 'px';
-      panel.style.top = Math.round(top) + 'px';
-      panel.style.right = 'auto';
+      pendingLeft = Math.max(4, Math.min(window.innerWidth - w - 4, origLeft + dx));
+      pendingTop = Math.max(4, Math.min(window.innerHeight - h - 4, origTop + dy));
+      if (!rafScheduled){
+        rafScheduled = true;
+        requestAnimationFrame(applyPending);
+      }
     });
 
     function endDrag(e){
       if (!dragging) return;
       dragging = false;
+      panel.style.willChange = '';
       try { handle.releasePointerCapture(e.pointerId); } catch(err){}
+      saveReactionPanelPos(pendingLeft, pendingTop);
     }
     handle.addEventListener('pointerup', endDrag);
     handle.addEventListener('pointercancel', endDrag);
@@ -1788,8 +1829,16 @@
 
     const w = Math.min(420, Math.round(window.innerWidth * 0.92));
     panel.style.width = w + 'px';
-    panel.style.left = Math.max(8, window.innerWidth - w - 24) + 'px';
-    panel.style.top = '90px';
+    const saved = loadReactionPanelPos();
+    const h = Math.round(window.innerHeight * 0.7); // грубая оценка высоты панели до отрисовки
+    let left = Math.max(8, window.innerWidth - w - 24);
+    let top = 90;
+    if (saved){
+      left = Math.max(4, Math.min(window.innerWidth - w - 4, saved.left));
+      top = Math.max(4, Math.min(window.innerHeight - h - 4, saved.top));
+    }
+    panel.style.left = left + 'px';
+    panel.style.top = top + 'px';
 
     closeBtn.addEventListener('click', () => {
       clearInterval(reactionPanel.tickInterval);
@@ -1827,6 +1876,7 @@
     top = Math.max(4, top);
     panel.style.left = Math.round(left) + 'px';
     panel.style.top = Math.round(top) + 'px';
+    saveReactionPanelPos(left, top);
   });
 
   /* ---------------- декоративная огромная галактика справа ---------------- */
@@ -1867,11 +1917,11 @@
       return {
         angle: Math.random() * Math.PI * 2,
         radiusRatio: .02 + Math.random() * .6,
-        speed: 0.02 + Math.random() * 0.045,
-        size: 0.5 + Math.random() * 1.5,
+        speed: 0.0025 + Math.random() * 0.006,
+        size: 0.5 + Math.random() * 1.3,
         osc: 0.3 + Math.random() * 0.5,
         phase: Math.random() * Math.PI * 2,
-        alpha: 0.2 + Math.random() * 0.6,
+        alpha: 0.12 + Math.random() * 0.4,
       };
     }
 
@@ -1883,7 +1933,7 @@
       const baseColors = ['#cfe0ff', '#e9d8ff', '#ffffff', '#ffe9c7', '#bcd4ff'];
       return {
         arm, t, armSpread,
-        drift: 0.15 + Math.random() * 0.25,
+        drift: 0.05 + Math.random() * 0.08,
         size: 0.5 + Math.random() * 1.3,
         alpha: 0.12 + Math.random() * 0.35,
         color: baseColors[Math.floor(Math.random() * baseColors.length)],
@@ -1894,13 +1944,15 @@
     function makeNameDot2(key){
       return {
         angle: Math.random() * Math.PI * 2,
-        radiusRatio: .04 + Math.random() * .5,
-        speed: 0.04 + Math.random() * 0.045,
+        // отступаем чуть дальше от ядра, чтобы бирки с никами не липли друг
+        // к другу в центре при большом числе участников
+        radiusRatio: .12 + Math.random() * .5,
+        speed: 0.005 + Math.random() * 0.006,
         size: 2 + Math.random() * 2,
         osc: 0.4 + Math.random() * 0.6,
         phase: Math.random() * Math.PI * 2,
         color: participantColor(key),
-        alpha: 0.65 + Math.random() * 0.3,
+        alpha: 0.88 + Math.random() * 0.12,
       };
     }
 
@@ -1929,9 +1981,13 @@
     function frame2(t){
       if (!W2 || !H2){ requestAnimationFrame(frame2); return; }
       syncNameDots2();
-      rotation2 += 0.00012 * 16;
+      rotation2 += 0.000012 * 16;
 
       ctx2.clearRect(0, 0, W2, H2);
+      // переустанавливаем на случай сброса состояния контекста после resize
+      ctx2.font = '10px "IBM Plex Mono", monospace';
+      ctx2.textAlign = 'center';
+      ctx2.textBaseline = 'middle';
       const gx = cx2(), gy = cy2();
       const R = Math.min(W2, H2) * 0.72;
 
@@ -1957,7 +2013,8 @@
         drawStar2(pt.x, pt.y, d.size, d.color, alpha, 2 + d.size);
       });
 
-      // просто пустые точки фона (декоративные звёзды)
+      // просто пустые точки фона (декоративные звёзды) — небольшие, полупрозрачные,
+      // без сильного размытия, чтобы выглядели как тонкие звёздочки, а не блики
       bgStars2.forEach((s) => {
         s.angle += s.speed * (16 / 1000);
         const r = s.radiusRatio * Math.min(W2,H2) + Math.sin(t / 1000 * s.osc + s.phase) * 3;
@@ -1966,10 +2023,10 @@
         const depth = (Math.sin(s.angle) * 0.5 + 0.5);
         const size = s.size * (0.7 + depth * 0.6);
         const alpha = s.alpha * (0.5 + depth * 0.5);
-        drawStar2(x, y, size, '#ffffff', alpha, 3 + size * 2);
+        drawStar2(x, y, size, '#ffffff', alpha, 1 + size);
       });
 
-      // участники — цветная точка + ник в прозрачной капсуле
+      // участники — яркая цветная точка с белым ядром + ник в прозрачной капсуле
       nameDots2.forEach((s, key) => {
         s.angle += s.speed * (16 / 1000);
         const r = s.radiusRatio * Math.min(W2,H2) + Math.sin(t / 1000 * s.osc + s.phase) * 4;
@@ -1977,8 +2034,15 @@
         const y = gy + Math.sin(s.angle) * r * 0.5;
         const depth = (Math.sin(s.angle) * 0.5 + 0.5);
         const size = s.size * (0.7 + depth * 0.8);
-        const alpha = s.alpha * (0.5 + depth * 0.5);
-        drawStar2(x, y, size, s.color, alpha, 12 + size * 2);
+        const alpha = s.alpha * (0.75 + depth * 0.25);
+        drawStar2(x, y, size, s.color, alpha, 16 + size * 3);
+        // яркое белое ядро поверх свечения — точка не теряется на фоне и выглядит заметнее
+        ctx2.globalAlpha = Math.min(1, alpha + 0.3);
+        ctx2.fillStyle = '#ffffff';
+        ctx2.beginPath();
+        ctx2.arc(x, y, Math.max(0.7, size * 0.4), 0, Math.PI * 2);
+        ctx2.fill();
+        ctx2.globalAlpha = 1;
 
         const label = entrants.get(key);
         if (label) drawNamePill2(x, y - size - 8, label, Math.min(0.85, alpha + 0.2), s.color);
@@ -1987,28 +2051,61 @@
       requestAnimationFrame(frame2);
     }
 
-    function drawStar2(x, y, size, color, alpha, glowBlur){
-      ctx2.save();
-      ctx2.globalAlpha = Math.max(0, alpha);
-      if (glowBlur){
-        ctx2.shadowColor = color;
-        ctx2.shadowBlur = glowBlur;
-      }
-      ctx2.fillStyle = color;
-      ctx2.beginPath();
-      ctx2.arc(x, y, size, 0, Math.PI * 2);
-      ctx2.fill();
-      ctx2.restore();
+    // Как и на главной канве с частицами: ctx.shadowBlur на сотнях точек в
+    // requestAnimationFrame-цикле реально нагружает главный поток (просадки
+    // FPS, задержки при скролле истории и при перетаскивании окна). Вместо
+    // shadowBlur один раз на цвет готовим спрайт свечения на офскрин-канве
+    // и просто масштабируем его через drawImage — на порядок дешевле.
+    const glowSpriteCache2 = new Map();
+    function getGlowSprite2(color){
+      let sprite = glowSpriteCache2.get(color);
+      if (sprite) return sprite;
+      const s = 40;
+      const off = document.createElement('canvas');
+      off.width = off.height = s;
+      const octx = off.getContext('2d');
+      const grad = octx.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
+      grad.addColorStop(0, color);
+      grad.addColorStop(0.32, color);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      octx.fillStyle = grad;
+      octx.beginPath();
+      octx.arc(s/2, s/2, s/2, 0, Math.PI * 2);
+      octx.fill();
+      glowSpriteCache2.set(color, off);
+      return off;
     }
 
-    // ник в маленькой прозрачной капсуле (скруглённая рамочка), чисто декоративно
+    function drawStar2(x, y, size, color, alpha, glowBlur){
+      const sprite = getGlowSprite2(color);
+      const d = (size + (glowBlur || 0) * 0.6) * 2;
+      ctx2.globalAlpha = Math.max(0, alpha);
+      ctx2.drawImage(sprite, x - d / 2, y - d / 2, d, d);
+      ctx2.globalAlpha = 1;
+    }
+
+    // ширина текста метки — измеряется один раз на ник и кэшируется, а не
+    // на каждый кадр для каждого участника (это может быть сотни вызовов
+    // measureText/сек при большом числе участников)
+    const pillWidthCache2 = new Map();
+    function pillWidthFor2(text){
+      let w = pillWidthCache2.get(text);
+      if (w === undefined){
+        w = ctx2.measureText(text).width;
+        pillWidthCache2.set(text, w);
+      }
+      return w;
+    }
+
+    // ник в маленькой прозрачной капсуле (скруглённая рамочка), чисто декоративно.
+    // shadowBlur на тексте убран — при сотнях участников это дорого каждый кадр;
+    // читаемость держится на плашке-подложке, а не на размытой тени.
+    // font/textAlign/textBaseline выставляются на каждый кадр (см. frame2) —
+    // resize канвы (смена canvas.width/height) сбрасывает состояние контекста,
+    // и если не переустановить это здесь, текст сползает от центра точки.
     function drawNamePill2(x, y, text, alpha, accent){
-      ctx2.save();
-      ctx2.font = '10px "IBM Plex Mono", monospace';
-      ctx2.textAlign = 'center';
-      ctx2.textBaseline = 'middle';
       const padX = 7, padY = 4;
-      const textW = ctx2.measureText(text).width;
+      const textW = pillWidthFor2(text);
       const w = textW + padX * 2, h = 16 + padY;
       const rx = x - w / 2, ry = y - h - 4;
       const radius = h / 2;
@@ -2030,10 +2127,7 @@
 
       ctx2.globalAlpha = alpha;
       ctx2.fillStyle = '#eef1f6';
-      ctx2.shadowColor = 'rgba(0,0,0,0.6)';
-      ctx2.shadowBlur = 3;
       ctx2.fillText(text, rx + w / 2, ry + h / 2 + 1);
-      ctx2.restore();
     }
 
     resizeCanvas2();
