@@ -220,6 +220,7 @@
     display:flex;
     flex-direction:column;
     background:radial-gradient(ellipse at 50% 40%, #171b2a 0%, #0b0d14 75%);
+    position:relative;
   }
   .stage-canvas-wrap{
     position:relative;
@@ -368,6 +369,32 @@
     gap:12px;
     padding:16px 18px 18px;
     border-top:1px solid var(--line-soft);
+  }
+
+  /* "Сбросить участников" вынесена в правый верхний угол окна со звёздами —
+     подальше от зелёной кнопки "Крутить", чтобы не задеть её случайно */
+  #resetBtn{
+    position:absolute;
+    top:14px;
+    right:14px;
+    z-index:6;
+    font-size:11.5px;
+    padding:7px 13px;
+    background:rgba(10,12,18,0.55);
+    border:1px solid var(--line);
+    border-radius:999px;
+    backdrop-filter:blur(6px);
+    -webkit-backdrop-filter:blur(6px);
+  }
+  #resetBtn:hover{
+    color:var(--danger);
+    border-color:rgba(255,107,107,0.45);
+    background:rgba(10,12,18,0.75);
+  }
+
+  /* "Крутить" остаётся одна в нижней панели — центрируется сама собой */
+  .stage-foot #drawBtn{
+    min-width:200px;
   }
 
   button{
@@ -691,6 +718,7 @@
   .stage-foot{ padding:12px; }
   .stage-foot button.primary{ min-width:120px; }
   .stage-foot button{ font-size:12px; }
+  #resetBtn{ top:8px; right:8px; padding:6px 10px; font-size:10.5px; }
   .history-head{ flex-wrap:wrap; }
   /* Bound the chat panel itself, independent of grid row/content height. */
   .cell-feed{ height:380px; min-height:0; max-height:380px; align-self:start; overflow:hidden; }
@@ -1374,7 +1402,7 @@
       const pos = flowPosition(cx() + Math.cos(star.angle)*r, cy() + Math.sin(star.angle)*r*.5, progress);
       const depth = Math.sin(star.angle)*.5+.5;
       const alpha = star.alpha*(.5+depth*.5)*fade;
-      drawStar(pos.x,pos.y,star.size*(.7+depth*.6),'#ffffff',alpha,5);
+      drawGlowDot(pos.x,pos.y,star.size*(.7+depth*.6),'#ffffff',alpha,5);
     });
 
     particles.forEach(p => {
@@ -1392,7 +1420,7 @@
         pos.y = p.enterFrom.y + (pos.y-p.enterFrom.y)*eased;
         if (ep >= 1) p.entering = false;
       }
-      drawStar(pos.x,pos.y,size,p.color,alpha,12);
+      drawGlowDot(pos.x,pos.y,size,p.color,alpha,12);
       p._x = pos.x; p._y = pos.y;
     });
     requestAnimationFrame(frame);
@@ -1410,6 +1438,41 @@
     ctx.arc(x, y, size, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+  }
+
+  // Быстрая замена drawStar() для точек фона/участников — их может быть
+  // сотни одновременно, а ctx.shadowBlur пересчитывается на каждый вызов
+  // и на больших составах (200–300+ участников) реально подтормаживает,
+  // особенно на слабых/мобильных устройствах и при высоком DPR.
+  // Вместо shadowBlur один раз на цвет рисуем спрайт-свечение (radial
+  // gradient на маленьком офскрин-канвасе) и дальше просто масштабируем
+  // его через drawImage — это на порядок дешевле для GPU/CPU.
+  const glowSpriteCache = new Map();
+  function getGlowSprite(color){
+    let sprite = glowSpriteCache.get(color);
+    if (sprite) return sprite;
+    const s = 48;
+    const off = document.createElement('canvas');
+    off.width = off.height = s;
+    const octx = off.getContext('2d');
+    const grad = octx.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
+    grad.addColorStop(0, color);
+    grad.addColorStop(0.32, color);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    octx.fillStyle = grad;
+    octx.beginPath();
+    octx.arc(s/2, s/2, s/2, 0, Math.PI * 2);
+    octx.fill();
+    glowSpriteCache.set(color, off);
+    return off;
+  }
+
+  function drawGlowDot(x, y, size, color, alpha, glowBlur){
+    const sprite = getGlowSprite(color);
+    const d = (size + (glowBlur || 0) * 0.6) * 2;
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.drawImage(sprite, x - d / 2, y - d / 2, d, d);
+    ctx.globalAlpha = 1;
   }
 
   function easeOutCubic(x){ return 1 - Math.pow(1 - x, 3); }
