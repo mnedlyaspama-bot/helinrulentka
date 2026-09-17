@@ -1,2 +1,2 @@
-# Рулетка для канала heliN139Ban
-кик: https://kick.com/helin139ban
+# Рулетка создана для канала heliN139Ban
+KICK: https://kick.com/helin139ban
