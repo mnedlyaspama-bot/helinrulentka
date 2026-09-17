@@ -169,6 +169,50 @@
   }
   canvas#galaxy2{ position:absolute; inset:0; display:block; width:100%; height:100%; }
   .wrap{ position:relative; z-index:1; }
+
+  /* всплывающие смайлики из чата — летят по всему экрану поверх панелей,
+     но под модальными окнами (реакции победителя, сплэш).
+     Раньше это рисовалось на одном canvas через drawImage — из-за этого
+     анимированные gif/webp эмоуты Kick превращались в застывшую картинку:
+     canvas просто копирует пиксели кадра, а не проигрывает файл. Теперь
+     каждый смайлик — это настоящий <img>/<span>, который браузер
+     анимирует сам (нативно), а сам "полёт" (взлёт, покачивание, поворот,
+     упругое появление/исчезание) крутит Web Animations API на transform/
+     opacity — это композитится на GPU и не трогает layout.
+     Чтобы это не лагало при шторме сообщений, элементы не создаются на
+     каждое сообщение: заранее готов фиксированный пул из EMOJI_POP_MAX
+     переиспользуемых слотов, и если все слоты заняты — новые смайлики
+     просто не показываются (декоративный эффект, не обязан показать
+     каждое сообщение 1-в-1). Пропорции эмоута сохраняются через
+     object-fit:contain — больше никакой обрезки в квадрат. */
+  .emoji-pop-layer{
+    position:fixed;
+    inset:0;
+    z-index:30;
+    pointer-events:none;
+    overflow:hidden;
+  }
+  .emoji-particle{
+    position:absolute;
+    left:0;
+    top:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    opacity:0;
+    will-change:transform, opacity;
+  }
+  .emoji-particle img{
+    display:block;
+    width:100%;
+    height:100%;
+    object-fit:contain;   /* вписывает картинку по пропорциям, без растягивания/обрезки в квадрат */
+  }
+  .emoji-particle .ept{
+    line-height:1;
+    text-align:center;
+    font-family:"Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif;
+  }
   @media(max-width:1100px){
     .mega{ width:100%; max-width:850px; margin:0 auto; }
     .decor-galaxy-panel{ right:-36vw; opacity:.32; }
@@ -906,6 +950,7 @@
 </div>
 
 <div class="decor-galaxy-panel" aria-hidden="true"><canvas id="galaxy2"></canvas></div>
+<div class="emoji-pop-layer" id="emojiPopLayer" aria-hidden="true"></div>
 <div class="wrap">
 
   <div class="topbar">
@@ -1165,6 +1210,175 @@
     while (el.feed.childNodes.length > 300) el.feed.removeChild(el.feed.firstChild);
   }
 
+  /* ---------------- всплывающие смайлики из чата на весь экран ----------------
+     Задача: при каждом сообщении, где есть смайлик (кастомный эмоут Kick вида
+     [emote:id:name] или обычный юникод-эмодзи), он должен на ~2 секунды живо
+     всплыть где-то на экране и исчезнуть — включая настоящую анимацию самого
+     эмоута, если он gif/webp.
+
+     Раньше это рисовалось на одном <canvas> через drawImage(). У canvas это
+     БЫЛО дёшево по CPU, но есть фундаментальная проблема: canvas просто
+     копирует текущие пиксели картинки в момент отрисовки. Он не "проигрывает"
+     файл — а браузер далеко не всегда продолжает декодировать следующий кадр
+     gif/webp у картинки, которая либо не показана на экране напрямую, либо
+     обрезана overflow:hidden в 0×0 контейнере (как было в прошлой версии).
+     В итоге анимированные эмоуты превращались в статичную картинку.
+
+     Поэтому теперь каждый смайлик — это настоящий видимый <img> (для
+     кастомных эмоутов Kick) или <span> (для юникод-эмодзи), которого
+     двигает, вращает и масштабирует Web Animations API (el.animate(...) на
+     transform/opacity — это композитится на GPU, минуя layout/paint). Раз
+     это настоящий <img> на экране — браузер анимирует gif/webp сам, нативно,
+     без всяких трюков.
+
+     Чтобы это не лагало при шторме из тысячи одновременно пишущих:
+       1) элементы НЕ создаются на каждое сообщение. Один раз при загрузке
+          страницы создаётся фиксированный пул из EMOJI_POP_MAX (40) готовых
+          <div class="emoji-particle"> — дальше они только переиспользуются
+          (берём свободный слот, настраиваем src/текст, запускаем анимацию,
+          по её окончании слот возвращается в пул);
+       2) если все слоты заняты — новое сообщение просто не показывает
+          смайлик (это декоративный эффект, не обязан отразить каждое
+          сообщение 1-в-1), и проверка "есть ли свободный слот" — это
+          мгновенный pop() из массива, без создания DOM и без regex;
+       3) сам regex-разбор текста на эмодзи запускается только если слот
+          вообще есть — при переполненном экране на разбор сообщений
+          вообще не тратится CPU;
+       4) размер картинки задаётся через CSS object-fit:contain — пропорции
+          эмоута сохраняются автоматически, без ручных вычислений и без
+          обрезки в квадрат (в чём и была прошлая проблема с неквадратными
+          эмоутами). */
+
+  const EMOJI_POP_MAX = 40;           // сколько смайликов может лететь по экрану одновременно (= размер пула DOM-слотов)
+  const EMOJI_PER_MESSAGE_MAX = 3;    // сколько смайликов брать из одного сообщения, чтобы длинный спам не забивал экран
+  const EMOJI_UNICODE_RE = /\p{Extended_Pictographic}(\u200d\p{Extended_Pictographic})*/gu;
+  const emojiPopLayer = document.getElementById('emojiPopLayer');
+
+  // пул переиспользуемых DOM-слотов — создаётся один раз, дальше никаких
+  // новых узлов не появляется, сколько бы сообщений ни пришло
+  const emojiSlotPool = [];
+  const emojiFreeSlots = [];
+
+  function buildEmojiSlot(){
+    const wrap = document.createElement('div');
+    wrap.className = 'emoji-particle';
+    const img = document.createElement('img');
+    img.decoding = 'async';
+    img.alt = '';
+    img.style.display = 'none';
+    const txt = document.createElement('span');
+    txt.className = 'ept';
+    txt.style.display = 'none';
+    wrap.appendChild(img);
+    wrap.appendChild(txt);
+    if (emojiPopLayer) emojiPopLayer.appendChild(wrap);
+    return { wrap, img, txt, anim: null };
+  }
+
+  if (emojiPopLayer){
+    for (let i = 0; i < EMOJI_POP_MAX; i++){
+      const slot = buildEmojiSlot();
+      emojiSlotPool.push(slot);
+      emojiFreeSlots.push(slot);
+    }
+  }
+
+  function releaseEmojiSlot(slot){
+    slot.wrap.style.opacity = '0';
+    slot.img.style.display = 'none';
+    slot.img.removeAttribute('src');
+    slot.txt.style.display = 'none';
+    slot.txt.textContent = '';
+    emojiFreeSlots.push(slot);
+  }
+
+  function extractEmojisFromMessage(content){
+    const found = [];
+    EMOTE_RE.lastIndex = 0;
+    let m;
+    while ((m = EMOTE_RE.exec(content))){
+      found.push({ type: 'kick', id: m[1] });
+      if (found.length >= EMOJI_PER_MESSAGE_MAX) return found;
+    }
+    EMOJI_UNICODE_RE.lastIndex = 0;
+    while ((m = EMOJI_UNICODE_RE.exec(content))){
+      found.push({ type: 'unicode', char: m[0] });
+      if (found.length >= EMOJI_PER_MESSAGE_MAX) return found;
+    }
+    return found;
+  }
+
+  function spawnEmojiPop(item){
+    const slot = emojiFreeSlots.pop();
+    if (!slot) return; // экран уже полон — пропускаем, это ок для декоративного эффекта
+
+    const vw = window.innerWidth || 800, vh = window.innerHeight || 600;
+    const size = 34 + Math.random() * 26;
+
+    if (item.type === 'kick'){
+      slot.img.style.display = 'block';
+      slot.txt.style.display = 'none';
+      // src меняется на каждый спавн — но сам файл эмоута браузер отдаёт
+      // из HTTP-кэша, повторной загрузки по сети почти всегда не будет
+      slot.img.src = 'https://files.kick.com/emotes/' + item.id + '/fullsize';
+    } else {
+      slot.img.style.display = 'none';
+      slot.txt.style.display = 'block';
+      slot.txt.style.fontSize = size + 'px';
+      slot.txt.textContent = item.char;
+    }
+
+    const x = size / 2 + Math.random() * Math.max(1, vw - size);
+    const y0 = vh + size;
+    const vy = 46 + Math.random() * 34;                 // px/сек, летит снизу вверх — как в самой первой версии
+    const swayAmp = 8 + Math.random() * 16;              // амплитуда покачивания вбок
+    const swayFreq = 0.7 + Math.random() * 0.8;          // сколько "волн" покачивания за весь полёт
+    const swayPhase = Math.random() * Math.PI * 2;
+    const life = 1500 + Math.random() * 1500;             // 2-3 секунды
+
+    slot.wrap.style.width = size + 'px';
+    slot.wrap.style.height = size + 'px';
+    slot.wrap.style.left = x + 'px';
+    slot.wrap.style.top = y0 + 'px';
+    slot.wrap.style.opacity = '0';
+
+    if (slot.anim) slot.anim.cancel();
+    // прошлая (исходная) анимация вылета: без упругого масштабирования и
+    // поворота — просто плавный подъём вверх с лёгким покачиванием вбок и
+    // обычным fade in/out по краям. Сэмплируем ту же синусоиду покачивания,
+    // что была в canvas-версии (sin(t·2π·swayFreq+phase)·swayAmp), точками
+    // по времени — WAAPI линейно интерполирует между ними на GPU.
+    const steps = 10;
+    const keyframes = [];
+    for (let i = 0; i <= steps; i++){
+      const o = i / steps;
+      const dy = -vy * (o * life / 1000);
+      const dx = Math.sin(o * Math.PI * 2 * swayFreq + swayPhase) * swayAmp;
+      let alpha = 1;
+      if (o < 0.12) alpha = o / 0.12;
+      else if (o > 0.7) alpha = Math.max(0, (1 - o) / 0.3);
+      keyframes.push({
+        transform: `translate(-50%,-50%) translateY(${dy}px) translateX(${dx}px)`,
+        opacity: alpha,
+        offset: o,
+      });
+    }
+    slot.anim = slot.wrap.animate(keyframes, {
+      duration: life,
+      easing: 'linear',
+      fill: 'forwards',
+    });
+    slot.anim.onfinish = () => releaseEmojiSlot(slot);
+  }
+
+  function popEmojisFromMessage(content){
+    // дешёвая проверка предела ДО парсинга регулярками — при шторме сообщений
+    // (переполненный экран) не тратим CPU на разбор текста вообще
+    if (!emojiFreeSlots.length) return;
+    const items = extractEmojisFromMessage(content);
+    for (let i = 0; i < items.length; i++) spawnEmojiPop(items[i]);
+  }
+
   function logWinnerReaction(username, content){
     if (!reactionPanel) return;
     const key = username.toLowerCase();
@@ -1217,6 +1431,7 @@
       isMatch = el.exact.checked ? (msg === kw) : msg.includes(kw);
     }
     logLine(username, content, isMatch);
+    popEmojisFromMessage(content);
 
     if (reactionPanel){
       logWinnerReaction(username, content);
