@@ -737,9 +737,174 @@
   .winner-entry .name{ font-size:clamp(22px,3vw,42px); overflow-wrap:anywhere; }
   @media(max-width:700px){ .mega-grid{ grid-template-rows:auto auto 320px; } }
   @media(max-width:480px){ .mega-grid{ grid-template-rows:auto auto 380px 320px; } }
+
+  /* ---------------- вступительный экран (ввод канала Kick) ---------------- */
+  body.app-hidden{ overflow:hidden; }
+  .wrap{
+    transition: opacity .8s cubic-bezier(.22,1,.36,1), transform .8s cubic-bezier(.22,1,.36,1), filter .8s cubic-bezier(.22,1,.36,1);
+  }
+  body.app-hidden .wrap{
+    opacity:0;
+    transform:scale(.97);
+    filter:blur(10px);
+    pointer-events:none;
+  }
+  .decor-galaxy-panel{ transition:opacity 1s ease; }
+  body.app-hidden .decor-galaxy-panel{ opacity:0; }
+
+  .splash-screen{
+    position:fixed;
+    inset:0;
+    z-index:2000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    background:
+      radial-gradient(ellipse 900px 500px at 50% -10%, rgba(138,180,255,0.12), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 85% 10%, rgba(83,252,24,0.10), transparent 60%),
+      var(--bg-0);
+    transition: opacity .7s cubic-bezier(.22,1,.36,1), filter .7s cubic-bezier(.22,1,.36,1), transform .7s cubic-bezier(.22,1,.36,1);
+  }
+  .splash-screen.hide{
+    opacity:0;
+    filter:blur(16px);
+    transform:scale(1.08);
+    pointer-events:none;
+  }
+  .splash-card{
+    width:100%;
+    max-width:420px;
+    background:var(--panel-solid);
+    border:1px solid var(--line);
+    border-radius:var(--r-lg);
+    padding:40px 34px 34px;
+    text-align:center;
+    box-shadow:0 30px 80px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.02) inset;
+    animation: splashIn .7s cubic-bezier(.22,1,.36,1) both;
+  }
+  @keyframes splashIn{
+    from{ opacity:0; transform:translateY(18px) scale(.96); }
+    to{ opacity:1; transform:translateY(0) scale(1); }
+  }
+  .splash-badge{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:var(--mono); font-size:11px; letter-spacing:0.08em;
+    color:var(--green);
+    background:var(--green-soft);
+    border:1px solid rgba(83,252,24,0.35);
+    padding:5px 12px; border-radius:999px;
+    margin-bottom:18px;
+  }
+  .splash-badge span{ color:var(--muted); font-weight:400; letter-spacing:0.02em; }
+  .splash-title{
+    font-family:var(--display);
+    font-weight:700;
+    font-size:clamp(26px,4vw,32px);
+    margin:0 0 10px;
+    letter-spacing:-0.02em;
+    background:linear-gradient(180deg, #ffffff 0%, #b9c3d6 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .splash-subtitle{
+    font-size:13.5px; color:var(--muted); margin:0 0 26px; line-height:1.5;
+  }
+  .splash-field{ text-align:left; margin-bottom:18px; }
+  .splash-input-group{
+    display:flex; align-items:stretch;
+    gap:9px;
+  }
+  .splash-prefix{
+    display:flex; align-items:center;
+    font-family:var(--mono); font-size:13px; color:var(--muted); white-space:nowrap;
+    background:var(--cell-solid);
+    border:1px solid var(--line);
+    border-radius:var(--r-sm);
+    padding:0 14px;
+  }
+  .splash-input{
+    flex:1; min-width:0;
+    background:var(--cell-solid);
+    border:1px solid var(--line);
+    border-radius:var(--r-sm);
+    outline:0;
+    color:var(--text); font-family:var(--mono); font-size:14px; padding:13px 14px;
+    transition:border-color .2s ease, box-shadow .2s ease;
+  }
+  .splash-input:focus{
+    border-color:rgba(83,252,24,0.55);
+    box-shadow:0 0 0 3px rgba(83,252,24,0.12);
+  }
+  .splash-input-group.invalid .splash-input{
+    border-color:rgba(255,107,107,0.6);
+    box-shadow:0 0 0 3px rgba(255,107,107,0.12);
+  }
+  .splash-input::placeholder{ color:#555c6b; }
+  .splash-input:disabled{ opacity:.5; }
+  .splash-error{
+    display:none; margin-top:8px; font-size:12px; color:var(--danger); font-family:var(--mono); line-height:1.5;
+  }
+  .splash-error.show{ display:block; }
+  .splash-btn{
+    width:100%;
+    position:relative;
+    display:flex; align-items:center; justify-content:center; gap:9px;
+    background:var(--green);
+    color:#0a0c08;
+    font-family:var(--display); font-weight:700; font-size:14.5px;
+    border:0; border-radius:var(--r-sm);
+    padding:14px 18px;
+    cursor:pointer;
+    box-shadow:0 8px 24px rgba(83,252,24,0.22);
+    transition:transform .15s ease, box-shadow .15s ease, opacity .2s ease;
+  }
+  .splash-btn:hover{ transform:translateY(-1px); box-shadow:0 10px 28px rgba(83,252,24,0.32); }
+  .splash-btn:active{ transform:translateY(0); }
+  .splash-btn:disabled{ cursor:default; opacity:.85; }
+  .splash-btn .btn-spinner{
+    display:none;
+    width:15px; height:15px;
+    border:2px solid rgba(10,12,8,0.35);
+    border-top-color:#0a0c08;
+    border-radius:50%;
+  }
+  .splash-btn.loading .btn-text{ opacity:.55; }
+  .splash-btn.loading .btn-spinner{ display:inline-block; animation:splashSpin .7s linear infinite; }
+  @keyframes splashSpin{ to{ transform:rotate(360deg); } }
+  .splash-hint{
+    margin-top:18px; font-size:11.5px; color:#5b6272; font-family:var(--mono); line-height:1.6;
+  }
+  .splash-hint code{ color:var(--muted); }
+  @media(max-width:480px){
+    .splash-card{ padding:30px 22px 26px; }
+  }
 </style>
 </head>
-<body>
+<body class="app-hidden">
+
+<div class="splash-screen" id="splashScreen">
+  <div class="splash-card">
+    <div  class="splash-badge">KICK<span>helin139ban</span></div>
+    <h1 class="splash-title">Розыгрыш в чате</h1>
+    <p class="splash-subtitle">Введите канал Kick, в котором проходит розыгрыш</p>
+
+    <div class="splash-field">
+      <div class="splash-input-group" id="splashInputGroup">
+        <span class="splash-prefix">kick.com/</span>
+        <input type="text" id="splashNickname" class="splash-input" placeholder="nickname" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="splash-error" id="splashError"></div>
+    </div>
+
+    <button class="splash-btn" id="splashConnectBtn" type="button">
+      <span class="btn-text">Подключиться</span>
+      <span class="btn-spinner" aria-hidden="true"></span>
+    </button>
+
+    <div class="splash-hint">Примечание: <code>nickname</code> может отличаться в ссылке.</div>
+  </div>
+</div>
+
 <div class="decor-galaxy-panel" aria-hidden="true"><canvas id="galaxy2"></canvas></div>
 <div class="wrap">
 
@@ -842,7 +1007,7 @@
 (function(){
   const PUSHER_URL = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=7.4.0&flash=false';
 
-  const CHANNEL_SLUG = 'helin139ban'; // из https://kick.com/popout/helin139ban/chat
+  let CHANNEL_SLUG = null; // задаётся на вступительном экране пользователем
 
   const el = {
     keyword: document.getElementById('keywordInput'),
@@ -1163,8 +1328,11 @@
     if (ws){ try { ws.close(); } catch(e){} ws = null; }
   }
 
-  const manualUrl = 'https://kick.com/api/v2/channels/' + encodeURIComponent(CHANNEL_SLUG);
-  el.manualLinkWrap.innerHTML = '<a href="' + manualUrl + '" target="_blank" rel="noopener">' + manualUrl + '</a>';
+  function updateManualUrl(){
+    const manualUrl = 'https://kick.com/api/v2/channels/' + encodeURIComponent(CHANNEL_SLUG || '');
+    el.manualLinkWrap.innerHTML = '<a href="' + manualUrl + '" target="_blank" rel="noopener">' + manualUrl + '</a>';
+  }
+  updateManualUrl();
 
   async function connectToChannel(){
     disconnect();
@@ -1172,7 +1340,7 @@
     const manual = el.manualId.value.trim();
     if (manual && /^\d+$/.test(manual)){ connectWebSocket(manual); return; }
 
-    setStatus('connecting', 'ищу канал helin139ban…', '');
+    setStatus('connecting', 'ищу канал ' + CHANNEL_SLUG + '…', '');
     try {
       const id = await lookupChatroomId(CHANNEL_SLUG);
       el.fallbackBox.classList.remove('show');
@@ -1186,8 +1354,89 @@
   el.connectBtn.addEventListener('click', connectToChannel);
   el.manualId.addEventListener('keydown', (e) => { if (e.key === 'Enter') connectToChannel(); });
 
-  // подключаемся сразу при загрузке страницы, канал фиксирован
-  connectToChannel();
+  /* ---------------- вступительный экран: ввод и проверка канала Kick ---------------- */
+  (function initSplash(){
+    const splash = document.getElementById('splashScreen');
+    const inputGroup = document.getElementById('splashInputGroup');
+    const input = document.getElementById('splashNickname');
+    const btn = document.getElementById('splashConnectBtn');
+    const errorBox = document.getElementById('splashError');
+
+    const LAST_NICK_KEY = 'kickRaffleLastNickname_v1';
+
+    function loadLastNickname(){
+      try { return localStorage.getItem(LAST_NICK_KEY) || ''; } catch(e){ return ''; }
+    }
+    function saveLastNickname(slug){
+      try { localStorage.setItem(LAST_NICK_KEY, slug); } catch(e){}
+    }
+
+    // принимает и голый ник, и вставленную целиком ссылку вида
+    // https://kick.com/nickname или kick.com/nickname/chat
+    function extractSlug(raw){
+      let v = (raw || '').trim();
+      v = v.replace(/^https?:\/\//i, '');
+      v = v.replace(/^(www\.)?kick\.com\/(popout\/)?/i, '');
+      v = v.split(/[\/?\s#]/)[0];
+      return v;
+    }
+
+    function setLoading(loading){
+      btn.disabled = loading;
+      input.disabled = loading;
+      btn.classList.toggle('loading', loading);
+    }
+
+    function showError(msg){
+      errorBox.textContent = msg;
+      errorBox.classList.add('show');
+      inputGroup.classList.add('invalid');
+    }
+
+    function clearError(){
+      errorBox.classList.remove('show');
+      inputGroup.classList.remove('invalid');
+    }
+
+    function revealApp(){
+      splash.classList.add('hide');
+      document.body.classList.remove('app-hidden');
+      setTimeout(() => { splash.style.display = 'none'; }, 750);
+    }
+
+    async function trySplashConnect(){
+      clearError();
+      const slug = extractSlug(input.value);
+      if (!slug){ showError('Введите никнейм канала'); input.focus(); return; }
+
+      setLoading(true);
+      try {
+        // используем ту же проверку через API Kick, что и основное подключение
+        const id = await lookupChatroomId(slug);
+        CHANNEL_SLUG = slug;
+        saveLastNickname(slug);
+        updateManualUrl();
+        revealApp();
+        connectWebSocket(id);
+      } catch (e){
+        setLoading(false);
+        showError('Канал «' + slug + '» не найден на Kick. Проверьте никнейм.');
+      }
+    }
+
+    // подставляем ник, который вводили в прошлый раз — останется только
+    // нажать «Подключиться», если канал не поменялся
+    const lastNick = loadLastNickname();
+    if (lastNick){
+      input.value = lastNick;
+      input.select();
+    }
+
+    btn.addEventListener('click', trySplashConnect);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') trySplashConnect(); });
+    input.addEventListener('input', clearError);
+    input.focus();
+  })();
 
   el.resetBtn.addEventListener('click', () => {
     entrants.clear();
