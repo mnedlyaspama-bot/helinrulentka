@@ -20,10 +20,14 @@
     --text:#eef1f6;
     --muted:#8b93a3;
     --green:#53fc18;
-    --green-soft: rgba(83,252,24,0.15);
+    --primary-hover:#6dfb3a;
+    --green-soft: rgba(var(--accent-rgb),0.15);
+    --accent-rgb: 83,252,24;
     --gold:#ffd166;
     --danger:#ff6b6b;
     --violet:#8ab4ff;
+    --kick-color:#53fc18;
+    --twitch-color:#9146ff;
     --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
     --display:"Space Grotesk", "Inter", sans-serif;
     --r-lg: 26px;
@@ -31,12 +35,34 @@
     --r-sm: 12px;
   }
 
+  /* Тема Twitch — те же переменные, но акцентный цвет и его rgb-триплет
+     переопределены на фирменный фиолетовый Twitch. Всё остальное в
+     разметке использует var(--green)/var(--green-soft)/var(--accent-rgb),
+     поэтому переключение темы одним классом на <body> красит весь сайт:
+     статус-точки, кнопки, рамки полей, свечения и декоративные градиенты. */
+  body.theme-twitch{
+    --green:#9146ff;
+    --primary-hover:#a568ff;
+    --green-soft: rgba(145,70,255,0.16);
+    --accent-rgb: 145,70,255;
+  }
+  /* На тёмно-фиолетовой кнопке/плашке чёрный текст Kick-темы нечитаем —
+     на Twitch-теме переключаем его на белый. */
+  body.theme-twitch .brand .mark{ color:#fff; }
+  .brand .author{ color:#00ff00; }
+  body.theme-twitch .brand .author{ color:var(--green); }
+  body.theme-twitch .splash-btn{ color:#fff; }
+  body.theme-twitch .splash-btn .btn-spinner{
+    border-color: rgba(255,255,255,0.35);
+    border-top-color:#fff;
+  }
+
   *{box-sizing:border-box;}
   html,body{margin:0;padding:0;}
   body{
     background:
       radial-gradient(ellipse 900px 500px at 50% -10%, rgba(138,180,255,0.10), transparent 60%),
-      radial-gradient(ellipse 700px 400px at 85% 10%, rgba(83,252,24,0.06), transparent 60%),
+      radial-gradient(ellipse 700px 400px at 85% 10%, rgba(var(--accent-rgb),0.06), transparent 60%),
       var(--bg-0);
     color:var(--text);
     font-family:var(--display);
@@ -111,7 +137,7 @@
     font-size:14px;
     color:var(--green);
     background:var(--green-soft);
-    border:1px solid rgba(83,252,24,0.35);
+    border:1px solid rgba(var(--accent-rgb),0.35);
     padding:7px 16px;
     border-radius:999px;
     margin-bottom:8px;
@@ -464,7 +490,7 @@
     border-color:var(--green);
     min-width:160px;
   }
-  button.primary:hover{background:#6dfb3a;}
+  button.primary:hover{background:var(--primary-hover);}
 
   button.ghost{
     background:transparent;
@@ -806,7 +832,7 @@
     padding:24px;
     background:
       radial-gradient(ellipse 900px 500px at 50% -10%, rgba(138,180,255,0.12), transparent 60%),
-      radial-gradient(ellipse 700px 500px at 85% 10%, rgba(83,252,24,0.10), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 85% 10%, rgba(var(--accent-rgb),0.10), transparent 60%),
       var(--bg-0);
     transition: opacity .7s cubic-bezier(.22,1,.36,1), filter .7s cubic-bezier(.22,1,.36,1), transform .7s cubic-bezier(.22,1,.36,1);
   }
@@ -836,11 +862,53 @@
     font-family:var(--mono); font-size:11px; letter-spacing:0.08em;
     color:var(--green);
     background:var(--green-soft);
-    border:1px solid rgba(83,252,24,0.35);
+    border:1px solid rgba(var(--accent-rgb),0.35);
     padding:5px 12px; border-radius:999px;
-    margin-bottom:18px;
   }
   .splash-badge span{ color:var(--muted); font-weight:400; letter-spacing:0.02em; }
+
+  /* Переключатель платформы: две плашки-кнопки, каждая всегда в своём
+     фирменном цвете (не зависит от текущей темы сайта), активная — яркая
+     и с подсветкой, неактивная — притушена. Клик по неактивной меняет
+     и тему всего сайта, и логику подключения (Kick Pusher / Twitch IRC). */
+  .platform-toggle{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    margin-bottom:20px;
+    flex-wrap:wrap;
+  }
+  .platform-btn{
+    display:inline-flex; align-items:center; gap:6px;
+    font-family:var(--mono); font-size:11px; letter-spacing:0.08em;
+    padding:6px 13px; border-radius:999px;
+    cursor:pointer;
+    background:transparent;
+    opacity:.45;
+    transition:opacity .18s ease, box-shadow .18s ease, background .18s ease;
+  }
+  .platform-btn:hover{ opacity:.8; }
+  .platform-btn .platform-mark{ font-weight:700; }
+  .platform-btn .platform-label{ color:var(--muted); font-weight:400; letter-spacing:0.02em; }
+  .platform-btn.kick{
+    color:var(--kick-color);
+    border:1px solid rgba(83,252,24,0.35);
+  }
+  .platform-btn.kick.active{
+    opacity:1;
+    background:rgba(83,252,24,0.15);
+    box-shadow:0 0 0 1px rgba(83,252,24,0.4), 0 0 16px rgba(83,252,24,0.18);
+  }
+  .platform-btn.twitch{
+    color:var(--twitch-color);
+    border:1px solid rgba(145,70,255,0.4);
+  }
+  .platform-btn.twitch.active{
+    opacity:1;
+    background:rgba(145,70,255,0.18);
+    box-shadow:0 0 0 1px rgba(145,70,255,0.5), 0 0 16px rgba(145,70,255,0.22);
+  }
   .splash-title{
     font-family:var(--display);
     font-weight:700;
@@ -876,8 +944,8 @@
     transition:border-color .2s ease, box-shadow .2s ease;
   }
   .splash-input:focus{
-    border-color:rgba(83,252,24,0.55);
-    box-shadow:0 0 0 3px rgba(83,252,24,0.12);
+    border-color:rgba(var(--accent-rgb),0.55);
+    box-shadow:0 0 0 3px rgba(var(--accent-rgb),0.12);
   }
   .splash-input-group.invalid .splash-input{
     border-color:rgba(255,107,107,0.6);
@@ -899,10 +967,10 @@
     border:0; border-radius:var(--r-sm);
     padding:14px 18px;
     cursor:pointer;
-    box-shadow:0 8px 24px rgba(83,252,24,0.22);
+    box-shadow:0 8px 24px rgba(var(--accent-rgb),0.22);
     transition:transform .15s ease, box-shadow .15s ease, opacity .2s ease;
   }
-  .splash-btn:hover{ transform:translateY(-1px); box-shadow:0 10px 28px rgba(83,252,24,0.32); }
+  .splash-btn:hover{ transform:translateY(-1px); box-shadow:0 10px 28px rgba(var(--accent-rgb),0.32); }
   .splash-btn:active{ transform:translateY(0); }
   .splash-btn:disabled{ cursor:default; opacity:.85; }
   .splash-btn .btn-spinner{
@@ -922,19 +990,40 @@
   @media(max-width:480px){
     .splash-card{ padding:30px 22px 26px; }
   }
+  /* Continuous winner reel; the second group is only a visual duplicate. */
+  .winners-list{ scrollbar-width:none; }
+  .winners-list::-webkit-scrollbar{ display:none; }
+  .winners-list.auto-scroll{ display:block; overflow:hidden; }
+  .winners-list.compact{ gap:8px; padding:22px 32px; }
+  .winners-list.compact .name{
+    font-size:clamp(18px,calc((clamp(230px,20vw,370px) - 120px) / var(--winner-count) / 1.15),42px);
+    line-height:1.15;
+  }
+  .winner-scroll-track{ will-change:transform; }
+  .winner-scroll-group{
+    display:flex; flex-direction:column; align-items:center;
+    gap:14px; padding-bottom:14px;
+  }
 </style>
 </head>
 <body class="app-hidden">
 
 <div class="splash-screen" id="splashScreen">
   <div class="splash-card">
-    <div  class="splash-badge">KICK<span>Рандомайзер</span></div>
+    <div class="platform-toggle" id="platformToggle" role="group" aria-label="Платформа">
+      <button type="button" class="platform-btn kick active" id="platformBtnKick" data-platform="kick">
+        <span class="platform-mark">KICK</span><span class="platform-label">Рандомайзер</span>
+      </button>
+      <button type="button" class="platform-btn twitch" id="platformBtnTwitch" data-platform="twitch">
+        <span class="platform-mark">TWITCH</span><span class="platform-label">Рандомайзер</span>
+      </button>
+    </div>
     <h1 class="splash-title">Розыгрыш в чате</h1>
-    <p class="splash-subtitle">Введите канал Kick, в котором проходит розыгрыш</p>
+    <p class="splash-subtitle" id="splashSubtitle">Введите канал Kick, в котором проходит розыгрыш</p>
 
     <div class="splash-field">
       <div class="splash-input-group" id="splashInputGroup">
-        <span class="splash-prefix">kick.com/</span>
+        <span class="splash-prefix" id="splashPrefix">kick.com/</span>
         <input type="text" id="splashNickname" class="splash-input" placeholder="nickname" autocomplete="off" spellcheck="false">
       </div>
       <div class="splash-error" id="splashError"></div>
@@ -954,7 +1043,7 @@
 <div class="wrap">
 
   <div class="topbar">
-    <div class="brand"><span class="mark">KICK</span> розыгрыш по слову в чате by <span style="color: #00ff00;">coffee_mayzz</span> & <span style="color: #00ff00;"> ugewaru</span></div>
+    <div class="brand"><span class="mark" id="brandMark">KICK</span> розыгрыш по слову в чате by <span class="author">coffee_mayzz</span> & <span class="author"> ugewaru</span></div>
 
     <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">не подключено</span></div>
   </div>
@@ -1041,7 +1130,7 @@
     </div>
   </div>
 
-  <footer class="foot">
+  <footer class="foot" id="footerNote">
     Работает напрямую в вашем браузере через открытый чат Kick, без сервера и без сохранения данных.<br>
     Неофициальный способ подключения — Kick не публикует официальный API чата.
   </footer>
@@ -1051,8 +1140,43 @@
 <script>
 (function(){
   const PUSHER_URL = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=7.4.0&flash=false';
+  const TWITCH_IRC_URL = 'wss://irc-ws.chat.twitch.tv:443';
 
   let CHANNEL_SLUG = null; // задаётся на вступительном экране пользователем
+  let PLATFORM = 'kick';   // 'kick' | 'twitch' — тоже задаётся на вступительном экране
+
+  // Тексты интерфейса, которые отличаются в зависимости от выбранной платформы.
+  const PLATFORM_TEXT = {
+    kick: {
+      mark: 'KICK',
+      title: '<title>Розыгрыш в чате - kick</title>',
+      subtitle: 'Введите канал Kick, в котором проходит розыгрыш',
+      prefix: 'kick.com/',
+      notFound: 'Канал «{slug}» не найден на Kick. Проверьте никнейм.',
+      footer: 'Работает напрямую в вашем браузере через открытый чат Kick, без сервера и без сохранения данных.<br>Неофициальный способ подключения — Kick не публикует официальный API чата.',
+    },
+    twitch: {
+      mark: 'TWITCH',
+      subtitle: 'Введите канал Twitch, в котором проходит розыгрыш',
+      prefix: 'twitch.tv/',
+      notFound: 'Не удалось подключиться к каналу «{slug}» на Twitch. Проверьте никнейм.',
+      footer: 'Работает напрямую в вашем браузере через открытый чат Twitch, без сервера и без сохранения данных.<br>Неофициальный способ подключения — используется анонимное чтение чата (Twitch IRC).',
+    },
+  };
+
+  function applyPlatformTheme(platform){
+    document.body.classList.toggle('theme-twitch', platform === 'twitch');
+    const t = PLATFORM_TEXT[platform];
+    const brandMark = document.getElementById('brandMark');
+    if (brandMark) brandMark.textContent = t.mark;
+    const footerNote = document.getElementById('footerNote');
+    if (footerNote) footerNote.innerHTML = t.footer;
+    document.title = platform === 'twitch' ? 'Розыгрыш в чате - twitch' : 'Розыгрыш в чате - kick';
+    // на Twitch не нужен ручной ввод ID чата (это чисто Kick-механизм) —
+    // прячем блок и подсказку целиком, пока платформа не переключена обратно
+    const fb = document.getElementById('fallbackBox');
+    if (fb && platform === 'twitch') fb.classList.remove('show');
+  }
 
   const el = {
     keyword: document.getElementById('keywordInput'),
@@ -1174,7 +1298,63 @@
   // разбираем их и подставляем картинку с CDN Kick вместо кода.
   const EMOTE_RE = /\[emote:(\d+):([^\]]+)\]/g;
 
-  function appendMessageContent(container, content){
+  // Twitch IRC supplies native emote IDs and inclusive Unicode character ranges.
+  // https://dev.twitch.tv/docs/chat/irc#privmsg-tags
+  function parseTwitchEmotes(content, tag){
+    if (!tag) return [];
+    const offsets = [0];
+    for (const char of content) offsets.push(offsets[offsets.length-1] + char.length);
+    const spans = [];
+    for (const entry of tag.split('/')){
+      const colon = entry.indexOf(':');
+      if (colon < 1) continue;
+      const id = entry.slice(0,colon);
+      if (!/^[a-zA-Z0-9_-]+$/.test(id)) continue;
+      for (const range of entry.slice(colon+1).split(',')){
+        const match = /^(\d+)-(\d+)$/.exec(range);
+        if (!match) continue;
+        const first = Number(match[1]), last = Number(match[2]);
+        if (first > last || last >= offsets.length-1) continue;
+        const start = offsets[first], end = offsets[last+1];
+        spans.push({id,start,end,name:content.slice(start,end)});
+      }
+    }
+    spans.sort((a,b)=>a.start-b.start || a.end-b.end);
+    let end = 0;
+    return spans.filter(span=>{
+      if (span.start < end) return false;
+      end = span.end;
+      return true;
+    });
+  }
+
+  function twitchEmoteUrl(id){
+    return 'https://static-cdn.jtvnw.net/emoticons/v2/' + encodeURIComponent(id) + '/default/dark/2.0';
+  }
+
+  function appendMessageContent(container, content, twitchEmotes = null){
+    if (!Array.isArray(twitchEmotes)){
+      appendKickMessageContent(container,content);
+      return;
+    }
+    let lastIndex = 0;
+    for (const emote of twitchEmotes){
+      container.appendChild(document.createTextNode(content.slice(lastIndex,emote.start)));
+      const img = document.createElement('img');
+      img.className = 'emote';
+      img.alt = emote.name;
+      img.title = emote.name;
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.onerror = () => { img.replaceWith(document.createTextNode(emote.name)); };
+      img.src = twitchEmoteUrl(emote.id);
+      container.appendChild(img);
+      lastIndex = emote.end;
+    }
+    container.appendChild(document.createTextNode(content.slice(lastIndex)));
+  }
+
+  function appendKickMessageContent(container, content){
     EMOTE_RE.lastIndex = 0;
     let lastIndex = 0;
     let match;
@@ -1185,10 +1365,11 @@
       const img = document.createElement('img');
       img.className = 'emote';
       img.src = 'https://files.kick.com/emotes/' + match[1] + '/fullsize';
-      img.alt = match[2];
-      img.title = match[2];
+      const emoteName = match[2];
+      img.alt = emoteName;
+      img.title = emoteName;
       img.loading = 'lazy';
-      img.onerror = () => { img.replaceWith(document.createTextNode(match[2])); };
+      img.onerror = () => { img.replaceWith(document.createTextNode(emoteName)); };
       container.appendChild(img);
       lastIndex = EMOTE_RE.lastIndex;
     }
@@ -1197,14 +1378,14 @@
     }
   }
 
-  function logLine(username, content, isMatch){
+  function logLine(username, content, isMatch, twitchEmotes = null){
     const line = document.createElement('div');
     line.className = 'feed-line' + (isMatch ? ' match' : '');
     const u = document.createElement('span');
     u.className = 'u';
     u.textContent = username + ': ';
     line.appendChild(u);
-    appendMessageContent(line, content);
+    appendMessageContent(line, content, twitchEmotes);
     el.feed.appendChild(line);
     el.feed.scrollTop = el.feed.scrollHeight;
     while (el.feed.childNodes.length > 300) el.feed.removeChild(el.feed.firstChild);
@@ -1292,11 +1473,17 @@
     emojiFreeSlots.push(slot);
   }
 
-  function extractEmojisFromMessage(content){
+  function extractEmojisFromMessage(content, twitchEmotes = null){
     const found = [];
+    if (Array.isArray(twitchEmotes)){
+      for (const emote of twitchEmotes){
+        found.push({type:'twitch',id:emote.id});
+        if (found.length >= EMOJI_PER_MESSAGE_MAX) return found;
+      }
+    }
     EMOTE_RE.lastIndex = 0;
     let m;
-    while ((m = EMOTE_RE.exec(content))){
+    while (!Array.isArray(twitchEmotes) && (m = EMOTE_RE.exec(content))){
       found.push({ type: 'kick', id: m[1] });
       if (found.length >= EMOJI_PER_MESSAGE_MAX) return found;
     }
@@ -1315,12 +1502,12 @@
     const vw = window.innerWidth || 800, vh = window.innerHeight || 600;
     const size = 34 + Math.random() * 26;
 
-    if (item.type === 'kick'){
+    if (item.type === 'kick' || item.type === 'twitch'){
       slot.img.style.display = 'block';
       slot.txt.style.display = 'none';
       // src меняется на каждый спавн — но сам файл эмоута браузер отдаёт
       // из HTTP-кэша, повторной загрузки по сети почти всегда не будет
-      slot.img.src = 'https://files.kick.com/emotes/' + item.id + '/fullsize';
+      slot.img.src = item.type === 'twitch' ? twitchEmoteUrl(item.id) : 'https://files.kick.com/emotes/' + item.id + '/fullsize';
     } else {
       slot.img.style.display = 'none';
       slot.txt.style.display = 'block';
@@ -1371,15 +1558,15 @@
     slot.anim.onfinish = () => releaseEmojiSlot(slot);
   }
 
-  function popEmojisFromMessage(content){
+  function popEmojisFromMessage(content, twitchEmotes = null){
     // дешёвая проверка предела ДО парсинга регулярками — при шторме сообщений
     // (переполненный экран) не тратим CPU на разбор текста вообще
     if (!emojiFreeSlots.length) return;
-    const items = extractEmojisFromMessage(content);
+    const items = extractEmojisFromMessage(content, twitchEmotes);
     for (let i = 0; i < items.length; i++) spawnEmojiPop(items[i]);
   }
 
-  function logWinnerReaction(username, content){
+  function logWinnerReaction(username, content, twitchEmotes = null){
     if (!reactionPanel) return;
     const key = username.toLowerCase();
     const idx = reactionPanel.winners.findIndex(w => w.key === key);
@@ -1389,7 +1576,7 @@
       w.stopped = true;
       w.elapsedAtStop = performance.now() - w.startTime;
     }
-    w.messages.push({ username, content });
+    w.messages.push({ username, content, twitchEmotes });
     if (w.messages.length > 100) w.messages.shift();
     if (idx === reactionPanel.activeIndex){
       reactionPanel.renderFeed();
@@ -1430,11 +1617,11 @@
       const msg = normalize(content);
       isMatch = el.exact.checked ? (msg === kw) : msg.includes(kw);
     }
-    logLine(username, content, isMatch);
-    popEmojisFromMessage(content);
+    logLine(username, content, isMatch, msg.twitchEmotes);
+    popEmojisFromMessage(content, msg.twitchEmotes);
 
     if (reactionPanel){
-      logWinnerReaction(username, content);
+      logWinnerReaction(username, content, msg.twitchEmotes);
     }
 
     if (isMatch){
@@ -1457,7 +1644,7 @@
     return json.chatroom.id;
   }
 
-  function connectWebSocket(chatroomId){
+  function connectKickWebSocket(chatroomId){
     setStatus('connecting', 'подключение к чату…', '');
     ws = new WebSocket(PUSHER_URL);
 
@@ -1539,6 +1726,87 @@
     return null;
   }
 
+  // Twitch не требует ключа/сервера — анонимное чтение чата возможно через
+  // публичный IRC-over-WebSocket с "гостевым" ником вида justinfanXXXXX
+  // (стандартный приём, которым пользуются оверлеи и боты-читалки чата;
+  // отправлять сообщения так нельзя, но для розыгрыша нужно только читать).
+  function connectTwitchIRC(channel){
+    setStatus('connecting', 'подключение к чату…', '');
+    const socket = new WebSocket(TWITCH_IRC_URL);
+    ws = socket;
+
+    let chatSeen = 0;
+    let joined = false;
+    const guestNick = 'justinfan' + (10000 + Math.floor(Math.random() * 89999));
+
+    function updateLiveDetail(){
+      setStatus('live', 'в эфире — слушаю чат', 'сообщений: ' + chatSeen);
+    }
+
+    socket.onopen = () => {
+      socket.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+      socket.send('PASS SCHMOOPIIE');
+      socket.send('NICK ' + guestNick);
+      socket.send('JOIN #' + channel.toLowerCase());
+      setStatus('connecting', 'подписка на канал чата…', 'сообщений: 0');
+    };
+
+    socket.onmessage = (evt) => {
+      const lines = String(evt.data).split('\r\n').filter(Boolean);
+      lines.forEach((line) => {
+        if (line.startsWith('PING')){ socket.send('PONG :tmi.twitch.tv'); return; }
+
+        if (!joined && (/ 366 /.test(line) || / JOIN #/.test(line))){
+          joined = true;
+          updateLiveDetail();
+        }
+
+        if (/(^|\s)NOTICE\s/.test(line) && /msg_channel_suspended|login authentication failed/i.test(line)){
+          setStatus('err', 'канал недоступен', line);
+          return;
+        }
+
+        const parsed = extractTwitchMessage(line);
+        if (parsed){
+          chatSeen++;
+          joined = true;
+          updateLiveDetail();
+          handleChatMessage(parsed);
+        }
+      });
+    };
+
+    socket.onerror = () => setStatus('err', 'ошибка соединения', 'проверьте никнейм канала и подключение к интернету');
+    socket.onclose = () => setStatus('idle', 'отключено', '');
+  }
+
+  // Разбор строки Twitch IRC вида:
+  // @badge-info=...;display-name=Name;... :nick!nick@nick.tmi.twitch.tv PRIVMSG #channel :текст сообщения
+  function extractTwitchMessage(line){
+    if (line.indexOf('PRIVMSG') === -1) return null;
+
+    let tags = {};
+    let rest = line;
+    if (rest[0] === '@'){
+      const sp = rest.indexOf(' ');
+      const tagStr = rest.slice(1, sp);
+      rest = rest.slice(sp + 1);
+      tagStr.split(';').forEach((pair) => {
+        const eq = pair.indexOf('=');
+        if (eq === -1) return;
+        tags[pair.slice(0, eq)] = pair.slice(eq + 1);
+      });
+    }
+
+    const m = rest.match(/^:([^!]+)!\S+ PRIVMSG #\S+ :(.*)$/);
+    if (!m) return null;
+
+    const username = (tags['display-name'] && tags['display-name'].trim()) || m[1];
+    // /me offsets start after the ACTION prefix, as specified by Twitch IRC.
+    const content = m[2].replace(/^\x01ACTION ([\s\S]*)\x01$/, '$1');
+    return { username, content, twitchEmotes:parseTwitchEmotes(content,tags.emotes) };
+  }
+
   function disconnect(){
     if (ws){ try { ws.close(); } catch(e){} ws = null; }
   }
@@ -1552,14 +1820,20 @@
   async function connectToChannel(){
     disconnect();
 
+    if (PLATFORM === 'twitch'){
+      if (!CHANNEL_SLUG){ setStatus('err', 'канал не выбран', 'введите никнейм на стартовом экране'); return; }
+      connectTwitchIRC(CHANNEL_SLUG);
+      return;
+    }
+
     const manual = el.manualId.value.trim();
-    if (manual && /^\d+$/.test(manual)){ connectWebSocket(manual); return; }
+    if (manual && /^\d+$/.test(manual)){ connectKickWebSocket(manual); return; }
 
     setStatus('connecting', 'ищу канал ' + CHANNEL_SLUG + '…', '');
     try {
       const id = await lookupChatroomId(CHANNEL_SLUG);
       el.fallbackBox.classList.remove('show');
-      connectWebSocket(id);
+      connectKickWebSocket(id);
     } catch (e){
       el.fallbackBox.classList.add('show');
       setStatus('err', 'не удалось найти канал автоматически', 'см. подсказку ниже, чтобы ввести ID чата вручную');
@@ -1570,28 +1844,97 @@
   el.manualId.addEventListener('keydown', (e) => { if (e.key === 'Enter') connectToChannel(); });
 
   /* ---------------- вступительный экран: ввод и проверка канала Kick ---------------- */
+  // Проверяем анонимным подключением к Twitch IRC, что канал реально
+  // отвечает (JOIN/NAMES или чужое сообщение в чате), прежде чем открывать
+  // основной экран — так же, как lookupChatroomId делает это для Kick.
+  // Соединение специально одноразовое: если проверка прошла успешно, экран
+  // раскрывается и запускается «боевое» connectTwitchIRC с чистым сокетом.
+  function verifyTwitchChannel(channel, timeoutMs){
+    return new Promise((resolve, reject) => {
+      const socket = new WebSocket(TWITCH_IRC_URL);
+      let settled = false;
+      const guestNick = 'justinfan' + (10000 + Math.floor(Math.random() * 89999));
+
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        try { socket.close(); } catch(e){}
+        reject(new Error('timeout'));
+      }, timeoutMs || 7000);
+
+      socket.onopen = () => {
+        socket.send('CAP REQ :twitch.tv/tags twitch.tv/commands');
+        socket.send('PASS SCHMOOPIIE');
+        socket.send('NICK ' + guestNick);
+        socket.send('JOIN #' + channel.toLowerCase());
+      };
+      socket.onmessage = (evt) => {
+        if (settled) return;
+        const lines = String(evt.data).split('\r\n').filter(Boolean);
+        for (const line of lines){
+          if (line.startsWith('PING')){ socket.send('PONG :tmi.twitch.tv'); continue; }
+          if (/ 366 /.test(line) || / JOIN #/.test(line) || extractTwitchMessage(line)){
+            settled = true;
+            clearTimeout(timer);
+            try { socket.close(); } catch(e){}
+            resolve(true);
+            return;
+          }
+        }
+      };
+      socket.onerror = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(new Error('ws error'));
+      };
+      socket.onclose = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(new Error('closed early'));
+      };
+    });
+  }
+
   (function initSplash(){
     const splash = document.getElementById('splashScreen');
     const inputGroup = document.getElementById('splashInputGroup');
     const input = document.getElementById('splashNickname');
     const btn = document.getElementById('splashConnectBtn');
     const errorBox = document.getElementById('splashError');
+    const subtitleEl = document.getElementById('splashSubtitle');
+    const prefixEl = document.getElementById('splashPrefix');
+    const btnKick = document.getElementById('platformBtnKick');
+    const btnTwitch = document.getElementById('platformBtnTwitch');
 
-    const LAST_NICK_KEY = 'kickRaffleLastNickname_v1';
+    const LAST_PLATFORM_KEY = 'kickRaffleLastPlatform_v1';
+    const NICK_KEYS = {
+      kick: 'kickRaffleLastNickname_v1',
+      twitch: 'twitchRaffleLastNickname_v1',
+    };
 
-    function loadLastNickname(){
-      try { return localStorage.getItem(LAST_NICK_KEY) || ''; } catch(e){ return ''; }
+    function loadLastPlatform(){
+      try { return localStorage.getItem(LAST_PLATFORM_KEY) || 'kick'; } catch(e){ return 'kick'; }
     }
-    function saveLastNickname(slug){
-      try { localStorage.setItem(LAST_NICK_KEY, slug); } catch(e){}
+    function saveLastPlatform(p){
+      try { localStorage.setItem(LAST_PLATFORM_KEY, p); } catch(e){}
+    }
+    function loadLastNickname(platform){
+      try { return localStorage.getItem(NICK_KEYS[platform]) || ''; } catch(e){ return ''; }
+    }
+    function saveLastNickname(platform, slug){
+      try { localStorage.setItem(NICK_KEYS[platform], slug); } catch(e){}
     }
 
     // принимает и голый ник, и вставленную целиком ссылку вида
-    // https://kick.com/nickname или kick.com/nickname/chat
+    // https://kick.com/nickname, kick.com/nickname/chat,
+    // https://twitch.tv/nickname или www.twitch.tv/nickname
     function extractSlug(raw){
       let v = (raw || '').trim();
       v = v.replace(/^https?:\/\//i, '');
       v = v.replace(/^(www\.)?kick\.com\/(popout\/)?/i, '');
+      v = v.replace(/^(www\.)?(m\.)?twitch\.tv\/(popout\/)?/i, '');
       v = v.split(/[\/?\s#]/)[0];
       return v;
     }
@@ -1599,6 +1942,8 @@
     function setLoading(loading){
       btn.disabled = loading;
       input.disabled = loading;
+      btnKick.disabled = loading;
+      btnTwitch.disabled = loading;
       btn.classList.toggle('loading', loading);
     }
 
@@ -1619,6 +1964,22 @@
       setTimeout(() => { splash.style.display = 'none'; }, 750);
     }
 
+    // переключение платформы на стартовом экране: меняем активную кнопку,
+    // цвет темы всего сайта, префикс поля ввода и подсказку — само
+    // подключение произойдёт только по клику «Подключиться»
+    function selectPlatform(platform){
+      PLATFORM = platform;
+      btnKick.classList.toggle('active', platform === 'kick');
+      btnTwitch.classList.toggle('active', platform === 'twitch');
+      subtitleEl.textContent = PLATFORM_TEXT[platform].subtitle;
+      prefixEl.textContent = PLATFORM_TEXT[platform].prefix;
+      applyPlatformTheme(platform);
+      clearError();
+      const last = loadLastNickname(platform);
+      input.value = last || '';
+      input.focus();
+    }
+
     async function trySplashConnect(){
       clearError();
       const slug = extractSlug(input.value);
@@ -1626,25 +1987,36 @@
 
       setLoading(true);
       try {
-        // используем ту же проверку через API Kick, что и основное подключение
-        const id = await lookupChatroomId(slug);
-        CHANNEL_SLUG = slug;
-        saveLastNickname(slug);
-        updateManualUrl();
-        revealApp();
-        connectWebSocket(id);
+        if (PLATFORM === 'twitch'){
+          await verifyTwitchChannel(slug);
+          CHANNEL_SLUG = slug;
+          saveLastPlatform('twitch');
+          saveLastNickname('twitch', slug);
+          revealApp();
+          connectTwitchIRC(slug);
+        } else {
+          // используем ту же проверку через API Kick, что и основное подключение
+          const id = await lookupChatroomId(slug);
+          CHANNEL_SLUG = slug;
+          saveLastPlatform('kick');
+          saveLastNickname('kick', slug);
+          updateManualUrl();
+          revealApp();
+          connectKickWebSocket(id);
+        }
       } catch (e){
         setLoading(false);
-        showError('Канал «' + slug + '» не найден на Kick. Проверьте никнейм.');
+        showError(PLATFORM_TEXT[PLATFORM].notFound.replace('{slug}', slug));
       }
     }
 
-    // подставляем ник, который вводили в прошлый раз — останется только
-    // нажать «Подключиться», если канал не поменялся
-    const lastNick = loadLastNickname();
-    if (lastNick){
-      input.value = lastNick;
-    }
+    btnKick.addEventListener('click', () => selectPlatform('kick'));
+    btnTwitch.addEventListener('click', () => selectPlatform('twitch'));
+
+    // восстанавливаем платформу и ник, который вводили в прошлый раз —
+    // останется только нажать «Подключиться», если канал не поменялся
+    const lastPlatform = loadLastPlatform();
+    selectPlatform(lastPlatform);
 
     btn.addEventListener('click', trySplashConnect);
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') trySplashConnect(); });
@@ -1841,36 +2213,27 @@
     drawMilkyWayBand(cx(),cy());
 
     if (animState === 'merged' || animState === 'roulette'){
-      // все звёзды слились в одну — вместо взрыва она мерцает и переливается
-      // разными цветами, из неё же "вырастает" рулетка с никами участников
-      const hue = (now / 9) % 360;
-      const pulse = 4 + Math.sin(now / 260) * 1.4;
-      drawStar(cx(), cy(), pulse * 2.6, 'hsl(' + ((hue + 40) % 360) + ',90%,72%)', 0.16, 60);
-      drawStar(cx(), cy(), pulse * 1.5, 'hsl(' + ((hue + 20) % 360) + ',92%,74%)', 0.38, 44);
-      drawStar(cx(), cy(), pulse, 'hsl(' + hue + ',95%,76%)', 0.95, 30);
+      drawMergedStar(now, 1);
       requestAnimationFrame(frame);
       return;
     }
 
     const active = animState === 'gather';
     const fade = animState === 'done' ? .32 : 1;
+    // Crossfade to one star before hundreds of overlapping halos turn white.
+    const compression = active ? smoothStep(Math.max(0,Math.min(1,(progress-.42)/.5))) : 0;
+    const starFade = active ? 1-compression : 1;
+    const participantFade = active
+      ? starFade / (1 + compression*compression*Math.max(1,particles.size*.65))
+      : 1;
 
-    if (active){
-      const radius = 8 + progress * 22;
-      const alpha = smoothStep(progress) * .15;
-      const glow = ctx.createRadialGradient(cx(),cy(),0,cx(),cy(),radius);
-      glow.addColorStop(0, 'rgba(230,235,255,' + alpha + ')');
-      glow.addColorStop(1, 'rgba(200,210,255,0)');
-      ctx.fillStyle = glow;
-      ctx.fillRect(0,0,W,H);
-    }
 
     bgStars.forEach(star => {
       star.angle += star.speed * dt / 1000;
       const r = star.radiusRatio * Math.min(W,H) + Math.sin(now / 1000 * star.osc + star.phase) * 3;
       const pos = flowPosition(cx() + Math.cos(star.angle)*r, cy() + Math.sin(star.angle)*r*.5, progress);
       const depth = Math.sin(star.angle)*.5+.5;
-      const alpha = star.alpha*(.5+depth*.5)*fade;
+      const alpha = star.alpha*(.5+depth*.5)*fade*starFade;
       drawGlowDot(pos.x,pos.y,star.size*(.7+depth*.6),'#ffffff',alpha,5);
     });
 
@@ -1880,7 +2243,7 @@
       let pos = flowPosition(cx() + Math.cos(p.angle)*r,cy() + Math.sin(p.angle)*r*.5,progress);
       const depth = Math.sin(p.angle)*.5+.5;
       const size = p.size*(.7+depth*.8);
-      const alpha = p.alpha*(.5+depth*.5)*fade;
+      const alpha = p.alpha*(.5+depth*.5)*fade*participantFade;
       if (active) p.entering = false;
       if (p.entering){
         const ep = Math.min(1,(now-p.enterStart)/p.enterDur);
@@ -1890,11 +2253,36 @@
         if (ep >= 1) p.entering = false;
       }
       // широкий мягкий ореол вокруг точки — имитация реального свечения источника света
-      drawGlowDot(pos.x,pos.y,size,p.color,alpha*0.5,34 + size*5);
-      drawGlowDot(pos.x,pos.y,size,p.color,alpha,16 + size*2);
+      drawGlowDot(pos.x,pos.y,size,p.color,alpha*0.5,(34 + size*5)*(1-compression*.75));
+      drawGlowDot(pos.x,pos.y,size,p.color,alpha,(16 + size*2)*(1-compression*.6));
       p._x = pos.x; p._y = pos.y;
     });
+    if (active) drawMergedStar(now, compression);
     requestAnimationFrame(frame);
+  }
+
+  function drawMergedStar(now, opacity){
+    if (opacity <= 0) return;
+    const colors = [...new Set([...particles.values()].map(p=>p.color))];
+    if (!colors.length) colors.push('#ff8ac2');
+    const position = now / 1000;
+    const index = Math.floor(position) % colors.length;
+    const a=colors[index], b=colors[(index+1)%colors.length];
+    const mix=smoothStep(position%1);
+    const rgb=[1,3,5].map(i=>Math.round(parseInt(a.slice(i,i+2),16)*(1-mix)+parseInt(b.slice(i,i+2),16)*mix));
+    const color='rgb('+rgb.join(',')+')';
+    const pulse=.3*Math.sin(now/380);
+    // One compact coloured core (about 7 px), with a faint 24 px halo.
+    ctx.save();
+    const halo=ctx.createRadialGradient(cx(),cy(),0,cx(),cy(),12+pulse);
+    halo.addColorStop(0,'rgba('+rgb.join(',')+',.24)');
+    halo.addColorStop(.4,'rgba('+rgb.join(',')+',.12)');
+    halo.addColorStop(1,'rgba('+rgb.join(',')+',0)');
+    ctx.globalAlpha=opacity;
+    ctx.fillStyle=halo;
+    ctx.fillRect(cx()-13,cy()-13,26,26);
+    ctx.restore();
+    drawStar(cx(),cy(),3.4+pulse,color,.9*opacity,4);
   }
 
   function drawStar(x, y, size, color, alpha, glowBlur){
@@ -1982,7 +2370,62 @@
 
   /* ---------------- draw flow ---------------- */
 
+  let winnerScrollFrame = 0;
+  let winnerScrollObserver = null;
+  let rouletteRun = 0;
+
+  function stopWinnerScroll(){
+    cancelAnimationFrame(winnerScrollFrame);
+    winnerScrollFrame = 0;
+    winnerScrollObserver?.disconnect();
+    winnerScrollObserver = null;
+    el.winnersList.classList.remove('auto-scroll');
+    el.winnersList.scrollTop = 0;
+  }
+
+  function startWinnerScroll(count){
+    el.winnersList.classList.toggle('compact',count > 1 && count <= 4);
+    el.winnersList.style.setProperty('--winner-count',count);
+    if (count <= 4) return;
+    const list = el.winnersList;
+    const group = document.createElement('div');
+    group.className = 'winner-scroll-group';
+    while (list.firstChild) group.appendChild(list.firstChild);
+    const clone = group.cloneNode(true);
+    clone.setAttribute('aria-hidden','true');
+    clone.inert = true;
+    const track = document.createElement('div');
+    track.className = 'winner-scroll-track';
+    track.append(group,clone);
+    list.appendChild(track);
+    list.classList.add('auto-scroll');
+    let distance = 0, offset = 0;
+    const measure = () => {
+      const next = parseFloat(getComputedStyle(group).height);
+      if (distance > 0 && next > 0) offset = offset/distance*next;
+      distance = next;
+    };
+    winnerScrollObserver = new ResizeObserver(measure);
+    winnerScrollObserver.observe(group);
+    measure();
+    let last = performance.now();
+    const begin = last + 1200;
+    function step(now){
+      if (!track.isConnected) return;
+      const dt = Math.max(0,Math.min(50,now-Math.max(last,begin)));
+      last = now;
+      if (distance > 0 && now >= begin){
+        offset = (offset + dt*.024) % distance; // 24 px/s, seamless repeat.
+        track.style.transform = 'translateY(' + (-offset) + 'px)';
+      }
+      winnerScrollFrame = requestAnimationFrame(step);
+    }
+    winnerScrollFrame = requestAnimationFrame(step);
+  }
+
   function hideWinner(){
+    rouletteRun++;
+    stopWinnerScroll();
     el.winnerOverlay.classList.remove('show');
     el.winnersList.innerHTML = '';
     el.rouletteOverlay.classList.remove('show');
@@ -1994,6 +2437,7 @@
   }
 
   function showWinners(keys){
+    stopWinnerScroll();
     el.winnerTag.textContent = keys.length > 1 ? 'ПОБЕДИТЕЛИ' : 'ПОБЕДИТЕЛЬ';
     el.winnersList.innerHTML = '';
     keys.forEach((key) => {
@@ -2007,6 +2451,7 @@
       el.winnersList.appendChild(entry);
     });
     el.winnerOverlay.classList.add('show');
+    startWinnerScroll(keys.length);
 
     // единая плавающая панель "слова победителя" с вкладкой на каждого
     createReactionPanel(keys);
@@ -2028,7 +2473,8 @@
       winnerKeys.push(poolCopy[idx]);
       poolCopy.splice(idx, 1);
     }
-    setTimeout(() => runRouletteSequence(winnerKeys), 260);
+    const run = rouletteRun;
+    setTimeout(() => { if (run === rouletteRun) runRouletteSequence(winnerKeys,run); }, 260);
   }
 
   function rouletteNamePool(){
@@ -2050,12 +2496,13 @@
     return rows;
   }
 
-  function runRouletteSequence(keys){
+  function runRouletteSequence(keys, run = rouletteRun){
     animState = 'roulette';
     el.rouletteOverlay.classList.add('show');
 
     let i = 0;
     function spinNext(){
+      if (run !== rouletteRun) return;
       if (i >= keys.length){
         el.rouletteOverlay.classList.remove('show');
         showWinners(winnerKeys);
@@ -2085,6 +2532,7 @@
 
       const start = performance.now();
       function step(now){
+        if (run !== rouletteRun) return;
         const p = Math.min(1, (now - start) / ROULETTE_MS);
         const eased = 1 - Math.pow(1 - p, 4); // резко разгоняется, плавно тормозит к финалу
         el.rouletteTrack.style.transform = 'translateY(' + (-finalOffset * eased) + 'px)';
@@ -2291,7 +2739,7 @@
         u.className = 'u';
         u.textContent = m.username + ': ';
         line.appendChild(u);
-        appendMessageContent(line, m.content);
+        appendMessageContent(line, m.content, m.twitchEmotes);
         feed.appendChild(line);
       });
       feed.scrollTop = feed.scrollHeight;
