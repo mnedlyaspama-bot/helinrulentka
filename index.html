@@ -34,6 +34,12 @@
     --r-md: 16px;
     --r-sm: 12px;
   }
+
+  /* Тема Twitch — те же переменные, но акцентный цвет и его rgb-триплет
+     переопределены на фирменный фиолетовый Twitch. Всё остальное в
+     разметке использует var(--green)/var(--green-soft)/var(--accent-rgb),
+     поэтому переключение темы одним классом на <body> красит весь сайт:
+     статус-точки, кнопки, рамки полей, свечения и декоративные градиенты. */
   body.theme-twitch{
     --green:#9146ff;
     --primary-hover:#a568ff;
@@ -2246,9 +2252,8 @@
         pos.y = p.enterFrom.y + (pos.y-p.enterFrom.y)*eased;
         if (ep >= 1) p.entering = false;
       }
-      // широкий мягкий ореол вокруг точки — имитация реального свечения источника света
-      drawGlowDot(pos.x,pos.y,size,p.color,alpha*0.5,(34 + size*5)*(1-compression*.75));
-      drawGlowDot(pos.x,pos.y,size,p.color,alpha,(16 + size*2)*(1-compression*.6));
+      // Небольшое цветное ядро и компактный мягкий ореол, как в галактике справа.
+      drawParticipantDot(ctx,pos.x,pos.y,Math.max(2.6,Math.min(3.4,size)),p.color,alpha);
       p._x = pos.x; p._y = pos.y;
     });
     if (active) drawMergedStar(now, compression);
@@ -2356,6 +2361,34 @@
     ctx.globalAlpha = Math.max(0, alpha);
     ctx.drawImage(sprite, x - d / 2, y - d / 2, d, d);
     ctx.globalAlpha = 1;
+  }
+
+  // Один спрайт на цвет для обеих галактик: чёткое цветное ядро, мягкий ореол.
+  const participantDotSprites = new Map();
+  function drawParticipantDot(target, x, y, radius, color, alpha){
+    if (alpha <= 0) return;
+    let sprite = participantDotSprites.get(color);
+    if (!sprite){
+      sprite = document.createElement('canvas');
+      sprite.width = sprite.height = 96;
+      const brush = sprite.getContext('2d');
+      const gradient = brush.createRadialGradient(48,48,0,48,48,48);
+      gradient.addColorStop(0,withAlpha(color,.98));
+      gradient.addColorStop(.18,withAlpha(color,.95));
+      gradient.addColorStop(.25,withAlpha(color,.85));
+      gradient.addColorStop(.32,withAlpha(color,.28));
+      gradient.addColorStop(.48,withAlpha(color,.13));
+      gradient.addColorStop(.72,withAlpha(color,.04));
+      gradient.addColorStop(1,withAlpha(color,0));
+      brush.fillStyle = gradient;
+      brush.fillRect(0,0,96,96);
+      participantDotSprites.set(color,sprite);
+    }
+    const diameter = radius * 8;
+    const previousAlpha = target.globalAlpha;
+    target.globalAlpha = Math.min(1,Math.max(0,alpha));
+    target.drawImage(sprite,x-diameter/2,y-diameter/2,diameter,diameter);
+    target.globalAlpha = previousAlpha;
   }
 
   function easeOutCubic(x){ return 1 - Math.pow(1 - x, 3); }
@@ -2963,7 +2996,7 @@
         drawStar2(x, y, size, '#ffffff', alpha, 1 + size);
       });
 
-      // участники — яркая цветная точка с белым ядром + ник в прозрачной капсуле
+      // Участники — цветное ядро с нежным ореолом + ник в прозрачной капсуле.
       nameDots2.forEach((s, key) => {
         s.angle += s.speed * (16 / 1000);
         const r = s.radiusRatio * Math.min(W2,H2) + Math.sin(t / 1000 * s.osc + s.phase) * 4;
@@ -2972,13 +3005,7 @@
         const depth = (Math.sin(s.angle) * 0.5 + 0.5);
         const size = s.size * (0.7 + depth * 0.8);
         const alpha = s.alpha * (0.75 + depth * 0.25);
-        // широкий мягкий ореол (имитация реального света вокруг источника)
-        drawStar2(x, y, size, s.color, alpha * 0.55, 34 + size * 5);
-        // основное свечение точки
-        drawStar2(x, y, size, s.color, alpha, 16 + size * 3);
-        // ядро — тоже мягкое свечение (спрайт), а не плоский залитый кружок,
-        // чтобы выглядело как настоящий источник света, а не пятно
-        drawStar2(x, y, Math.max(0.6, size * 0.35), '#ffffff', Math.min(1, alpha + 0.25), size * 1.6);
+        drawParticipantDot(ctx2,x,y,Math.max(2.6,Math.min(3.8,size)),s.color,alpha);
 
         const label = entrants.get(key);
         if (label) drawNamePill2(x, y - size - 8, label, Math.min(0.85, alpha + 0.2), s.color);
