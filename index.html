@@ -3026,7 +3026,7 @@
     const rerollBtn = document.createElement('button');
     rerollBtn.type = 'button';
     rerollBtn.className = 'ghost small rw-reroll';
-    rerollBtn.textContent = 'не ответил(а) — выбрать другого';
+    rerollBtn.textContent = 'не ответил(а)';
     // Перевыбор имеет смысл, только когда победителей несколько — если
     // разыгрывается один приз, "заменить" его больше не на кого из этого
     // же розыгрыша, а рулетка на весь пул участников уже есть в кнопке
@@ -3157,7 +3157,7 @@
     // и только когда оно полностью раскрылось — запускается сама прокрутка
     // имён, чтобы анимация не выглядела рваной.
     const REVEAL_MS = 300;
-    const RESULT_HOLD_MS = 1100; // дать разглядеть, кто выпал, прежде чем свернуть окно
+    const RESULT_HOLD_MS = 500; // дать разглядеть, кто выпал, прежде чем свернуть окно
     function spinMiniRoulette(oldKey, newKey, idx){
       const newName = entrants.get(newKey) || newKey;
       rerollWindow.classList.add('show');
