@@ -1173,7 +1173,7 @@
         </div>
         <div class="row-check">
           <input type="checkbox" id="lowPowerMode">
-          <label for="lowPowerMode" style="margin:0;">Слабое устройство — убрать фоновую галактику</label>
+          <label for="lowPowerMode" style="margin:0;">убрать фоновую галактику</label>
         </div>
         <div class="connect-spacer"></div>
 
@@ -3228,6 +3228,15 @@
     const RESULT_HOLD_MS = 500; // дать разглядеть, кто выпал, прежде чем свернуть окно
     function spinMiniRoulette(oldKey, newKey, idx){
       const newName = entrants.get(newKey) || newKey;
+
+      // Тот же флажок "пропустить анимацию", что и у основной рулетки —
+      // если включён, сразу применяем замену без разворота окна и прокрутки.
+      if (el.skipAnimation.checked){
+        rerollBtn.disabled = false;
+        applyReroll(oldKey, newKey, idx);
+        return;
+      }
+
       rerollWindow.classList.add('show');
 
       // окно сначала плавно разворачивается (см. CSS-переход у .rw-reroll-window),
