@@ -1327,7 +1327,7 @@
      при каждом изменении и восстанавливаются при загрузке страницы. */
   const PARTICIPANTS_KEY = 'kickRaffleParticipants_v1';
 
-  function saveParticipants(){
+  function saveParticipantsNow(){
     try {
       localStorage.setItem(PARTICIPANTS_KEY, JSON.stringify({
         entrants: [...entrants.entries()],
@@ -1336,6 +1336,26 @@
       }));
     } catch(e){}
   }
+
+  // При флешмобе в чате (сотни новых участников за секунды) вызов
+  // saveParticipants() происходит на КАЖДОЕ совпавшее сообщение — если бы
+  // каждый раз сериализовать и писать в localStorage весь растущий список,
+  // на 1000 участниках это было бы O(n²) синхронной работы на главном потоке.
+  // Вместо этого коалесцируем: реальная запись откладывается на
+  // SAVE_DEBOUNCE_MS после последнего изменения, и сколько бы сообщений ни
+  // пришло за это время — localStorage.setItem() выполнится один раз.
+  const SAVE_DEBOUNCE_MS = 400;
+  let saveParticipantsTimer = null;
+  function saveParticipants(){
+    clearTimeout(saveParticipantsTimer);
+    saveParticipantsTimer = setTimeout(saveParticipantsNow, SAVE_DEBOUNCE_MS);
+  }
+  // ...но если вкладку закрывают/обновляют посреди всплеска — не теряем
+  // последние несохранённые изменения, дописываем немедленно.
+  window.addEventListener('beforeunload', () => {
+    clearTimeout(saveParticipantsTimer);
+    saveParticipantsNow();
+  });
 
   function loadParticipants(){
     try {
@@ -1353,7 +1373,7 @@
   // роста entrants/particles при огромном флешмобе в чате — без лимита каждый
   // новый ник добавлял бы ещё одну точку в галактику навсегда, и на очень
   // больших числах (десятки тысяч) это начало бы просаживать FPS анимации.
-  const MAX_ENTRANTS = 5000;
+  const MAX_ENTRANTS = 500;
 
   /* ---------------- автопереподключение к чату ----------------
      Раньше при обрыве соединения (сеть моргнула, Pusher/Twitch разорвали
@@ -1775,7 +1795,7 @@
 
   function renderEntrants(){
     el.heroCount.textContent = entrants.size;
-    el.drawBtn.disabled = eligibleEntrants().length === 0 || drawing;
+    el.drawBtn.disabled = !hasEligibleEntrant() || drawing;
     syncParticles();
     saveParticipants();
   }
@@ -1786,6 +1806,20 @@
       if (!(el.excludeWinners.checked && excluded.has(key))) out.push(key);
     });
     return out;
+  }
+
+  // Лёгкая версия eligibleEntrants() для мест, где нужен только факт "есть ли
+  // хоть один доступный участник" (например, включать ли кнопку розыгрыша).
+  // renderEntrants() дёргается на каждое новое сообщение в чате — строить на
+  // это полный массив из entrants.size элементов (при 1000 участниках) и
+  // тут же выбрасывать его, оставив только .length === 0, бессмысленно;
+  // выходим по первому же подходящему ключу.
+  function hasEligibleEntrant(){
+    const skipExcluded = el.excludeWinners.checked;
+    for (const key of entrants.keys()){
+      if (!(skipExcluded && excluded.has(key))) return true;
+    }
+    return false;
   }
 
   function normalize(s){ return (s || '').trim().toLowerCase(); }
@@ -2371,13 +2405,23 @@
   }
 
   function syncParticles(){
+    let added = false;
     entrants.forEach((_, key) => {
-      if (!particles.has(key)) particles.set(key, makeParticle(key));
+      if (!particles.has(key)){ particles.set(key, makeParticle(key)); added = true; }
     });
-    // drop particles for entrants that no longer exist (e.g. after reset)
-    particles.forEach((_, key) => {
-      if (!entrants.has(key)) particles.delete(key);
-    });
+    // Второй проход (поиск "осиротевших" частиц, чей участник исчез из
+    // entrants) нужен только после reset()'а или подобной операции, когда
+    // particles стал БОЛЬШЕ entrants. На горячем пути — когда чат просто
+    // подкидывает новых участников одного за другим, вплоть до тысячи —
+    // particles.size никогда не превышает entrants.size, и полный проход по
+    // всей карте частиц на каждое сообщение можно и нужно пропускать.
+    if (particles.size > entrants.size){
+      particles.forEach((_, key) => {
+        if (!entrants.has(key)) particles.delete(key);
+      });
+      added = true;
+    }
+    if (added) mergedColorsCache = null;
   }
 
   function cx(){ return W / 2; }
@@ -2483,10 +2527,22 @@
     rafWhenVisible(frame);
   }
 
+  // Кэш палитры цветов для мерцающей объединённой звезды (см. drawMergedStar).
+  // Инвалидируется в syncParticles() при реальном изменении состава частиц.
+  let mergedColorsCache = null;
+
   function drawMergedStar(now, opacity){
     if (opacity <= 0) return;
-    const colors = [...new Set([...particles.values()].map(p=>p.color))];
-    if (!colors.length) colors.push('#ff8ac2');
+    // Раньше этот массив пересобирался (со спредом всей Map и Set-дедупом)
+    // на КАЖДЫЙ кадр анимации, пока идёт слияние/рулетка — а это может быть
+    // несколько секунд на 1000 частиц при 60 кадрах/сек. Палитра меняется
+    // только когда меняется состав участников, а не каждый кадр, поэтому
+    // считаем её один раз и переиспользуем, пока не придёт инвалидация.
+    if (!mergedColorsCache){
+      mergedColorsCache = [...new Set([...particles.values()].map(p=>p.color))];
+      if (!mergedColorsCache.length) mergedColorsCache.push('#ff8ac2');
+    }
+    const colors = mergedColorsCache;
     const position = now / 1000;
     const index = Math.floor(position) % colors.length;
     const a=colors[index], b=colors[(index+1)%colors.length];
@@ -2745,6 +2801,42 @@
     return rows;
   }
 
+  // Общая механика прокрутки рулетки — используется и главной рулеткой
+  // (roulette-window/track), и компактной мини-рулеткой в панели "не ответил".
+  // Строит дорожку из имён в track, прокручивает её до целевого имени с тем же
+  // easing'ом (резкий разгон, плавное торможение к финалу) и по завершении
+  // вызывает onDone. isCurrent позволяет прервать анимацию, если пока она
+  // играла, розыгрыш перезапустили (см. rouletteRun).
+  function animateRouletteTrack({ track, rows, rowClass, rowH, durationMs, isCurrent, onDone }){
+    track.innerHTML = '';
+    rows.forEach((name) => {
+      const row = document.createElement('div');
+      row.className = rowClass;
+      row.textContent = name;
+      track.appendChild(row);
+    });
+
+    // окно рулетки показывает 3 строки — победитель (предпоследняя строка) должен
+    // оказаться ровно в центральном слоте, а под ним останется ещё одно имя —
+    // как будто рулетка чуть-чуть не докрутила
+    const finalOffset = (rows.length - 3) * rowH;
+    track.style.transform = 'translateY(0px)';
+
+    const start = performance.now();
+    function step(now){
+      if (isCurrent && !isCurrent()) return;
+      const p = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - p, 4); // резко разгоняется, плавно тормозит к финалу
+      track.style.transform = 'translateY(' + (-finalOffset * eased) + 'px)';
+      if (p < 1){
+        requestAnimationFrame(step);
+      } else {
+        onDone();
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
   function runRouletteSequence(keys, run = rouletteRun){
     animState = 'roulette';
     el.rouletteOverlay.classList.add('show');
@@ -2764,35 +2856,18 @@
         ? ('определяем победителя ' + (i + 1) + ' из ' + keys.length)
         : 'определяем победителя';
 
-      const rows = buildRouletteReel(displayName);
-      el.rouletteTrack.innerHTML = '';
-      rows.forEach((name) => {
-        const row = document.createElement('div');
-        row.className = 'roulette-row';
-        row.textContent = name;
-        el.rouletteTrack.appendChild(row);
-      });
-
-      // окно рулетки показывает 3 строки — победитель (предпоследняя строка) должен
-      // оказаться ровно в центральном слоте, а под ним останется ещё одно имя —
-      // как будто рулетка чуть-чуть не докрутила
-      const finalOffset = (rows.length - 3) * ROULETTE_ROW_H;
-      el.rouletteTrack.style.transform = 'translateY(0px)';
-
-      const start = performance.now();
-      function step(now){
-        if (run !== rouletteRun) return;
-        const p = Math.min(1, (now - start) / ROULETTE_MS);
-        const eased = 1 - Math.pow(1 - p, 4); // резко разгоняется, плавно тормозит к финалу
-        el.rouletteTrack.style.transform = 'translateY(' + (-finalOffset * eased) + 'px)';
-        if (p < 1){
-          requestAnimationFrame(step);
-        } else {
+      animateRouletteTrack({
+        track: el.rouletteTrack,
+        rows: buildRouletteReel(displayName),
+        rowClass: 'roulette-row',
+        rowH: ROULETTE_ROW_H,
+        durationMs: ROULETTE_MS,
+        isCurrent: () => run === rouletteRun,
+        onDone: () => {
           i++;
           setTimeout(spinNext, ROULETTE_PAUSE_MS);
-        }
-      }
-      requestAnimationFrame(step);
+        },
+      });
     }
     spinNext();
   }
@@ -2951,7 +3026,7 @@
     const rerollBtn = document.createElement('button');
     rerollBtn.type = 'button';
     rerollBtn.className = 'ghost small rw-reroll';
-    rerollBtn.textContent = 'не ответил(а)';
+    rerollBtn.textContent = 'не ответил(а) — выбрать другого';
     // Перевыбор имеет смысл, только когда победителей несколько — если
     // разыгрывается один приз, "заменить" его больше не на кого из этого
     // же розыгрыша, а рулетка на весь пул участников уже есть в кнопке
@@ -3082,30 +3157,21 @@
     // и только когда оно полностью раскрылось — запускается сама прокрутка
     // имён, чтобы анимация не выглядела рваной.
     const REVEAL_MS = 300;
-    const RESULT_HOLD_MS = 500; // дать разглядеть, кто выпал, прежде чем свернуть окно
+    const RESULT_HOLD_MS = 1100; // дать разглядеть, кто выпал, прежде чем свернуть окно
     function spinMiniRoulette(oldKey, newKey, idx){
       const newName = entrants.get(newKey) || newKey;
-      const rows = buildRouletteReel(newName, MINI_ROULETTE_ROWS);
-      rerollTrack.innerHTML = '';
-      rows.forEach((name) => {
-        const row = document.createElement('div');
-        row.className = 'rw-reroll-row';
-        row.textContent = name;
-        rerollTrack.appendChild(row);
-      });
-      rerollTrack.style.transform = 'translateY(0px)';
       rerollWindow.classList.add('show');
 
-      const finalOffset = (rows.length - 3) * MINI_ROULETTE_ROW_H;
+      // окно сначала плавно разворачивается (см. CSS-переход у .rw-reroll-window),
+      // и только когда оно полностью раскрылось — запускается сама прокрутка имён
       setTimeout(() => {
-        const start = performance.now();
-        function step(now){
-          const p = Math.min(1, (now - start) / MINI_ROULETTE_MS);
-          const eased = 1 - Math.pow(1 - p, 4); // резко разгоняется, плавно тормозит к финалу
-          rerollTrack.style.transform = 'translateY(' + (-finalOffset * eased) + 'px)';
-          if (p < 1){
-            requestAnimationFrame(step);
-          } else {
+        animateRouletteTrack({
+          track: rerollTrack,
+          rows: buildRouletteReel(newName, MINI_ROULETTE_ROWS),
+          rowClass: 'rw-reroll-row',
+          rowH: MINI_ROULETTE_ROW_H,
+          durationMs: MINI_ROULETTE_MS,
+          onDone: () => {
             // рулетка остановилась на имени — держим окно открытым ещё
             // немного, чтобы результат было видно, и только потом сворачиваем
             setTimeout(() => {
@@ -3113,9 +3179,8 @@
               rerollBtn.disabled = false;
               applyReroll(oldKey, newKey, idx);
             }, RESULT_HOLD_MS);
-          }
-        }
-        requestAnimationFrame(step);
+          },
+        });
       }, REVEAL_MS);
     }
 
