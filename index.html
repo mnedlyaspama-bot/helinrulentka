@@ -1076,14 +1076,14 @@
           <label for="excludeWinners" style="margin:0;">Не давать выигрывать повторно за сессию</label>
         </div>
         <div class="connect-spacer"></div>
-        <button class="primary" id="connectBtn" style="width:100%;">Переподключиться к чату</button>
 
         <div class="fallback" id="fallbackBox">
           <label for="manualId">Не удалось получить ID чата автоматически. Введите ID вручную:</label>
           <input type="text" id="manualId" placeholder="например, 668">
           <div class="hint">
-            Откройте <span id="manualLinkWrap"></span> в новой вкладке и найдите в ответе <code>"chatroom":{"id": ЧИСЛО}</code> — впишите число сюда и подключитесь ещё раз.
+            Откройте <span id="manualLinkWrap"></span> в новой вкладке и найдите в ответе <code>"chatroom":{"id": ЧИСЛО}</code> — впишите число сюда и нажмите «Подключиться».
           </div>
+          <button class="primary" id="manualConnectBtn" style="width:100%; margin-top:8px;">Подключиться</button>
         </div>
         <div class="hint" id="statusDetail"></div>
       </div>
@@ -1203,7 +1203,7 @@
     winnersCount: document.getElementById('winnersCountInput'),
     exact: document.getElementById('exactMatch'),
     excludeWinners: document.getElementById('excludeWinners'),
-    connectBtn: document.getElementById('connectBtn'),
+    manualConnectBtn: document.getElementById('manualConnectBtn'),
     fallbackBox: document.getElementById('fallbackBox'),
     manualId: document.getElementById('manualId'),
     manualLinkWrap: document.getElementById('manualLinkWrap'),
@@ -1230,6 +1230,36 @@
   let entrantMessages = new Map(); // key(lower) -> последнее сообщение со словом для участия
   let excluded = new Set();
 
+  /* ---------------- сохранение участников между перезагрузками страницы ----
+     Раньше список участников жил только в памяти вкладки: обновление
+     страницы (например, OBS перезагрузил browser source) стирало всех, кто
+     уже написал слово для участия, без предупреждения. Теперь участники,
+     их последние сообщения и список уже выигравших сохраняются в localStorage
+     при каждом изменении и восстанавливаются при загрузке страницы. */
+  const PARTICIPANTS_KEY = 'kickRaffleParticipants_v1';
+
+  function saveParticipants(){
+    try {
+      localStorage.setItem(PARTICIPANTS_KEY, JSON.stringify({
+        entrants: [...entrants.entries()],
+        entrantMessages: [...entrantMessages.entries()],
+        excluded: [...excluded],
+      }));
+    } catch(e){}
+  }
+
+  function loadParticipants(){
+    try {
+      const raw = localStorage.getItem(PARTICIPANTS_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (Array.isArray(data.entrants)) entrants = new Map(data.entrants);
+      if (Array.isArray(data.entrantMessages)) entrantMessages = new Map(data.entrantMessages);
+      if (Array.isArray(data.excluded)) excluded = new Set(data.excluded);
+    } catch(e){}
+  }
+  loadParticipants();
+
   // Максимум уникальных участников за один розыгрыш. Защита от неограниченного
   // роста entrants/particles при огромном флешмобе в чате — без лимита каждый
   // новый ник добавлял бы ещё одну точку в галактику навсегда, и на очень
@@ -1255,6 +1285,11 @@
   let reconnectTimer = null;
   let reconnectAttempts = 0;
   let connectionGen = 0;
+  // После стольких неудачных попыток подряд перестаём долбиться в мёртвый
+  // канал (опечатка в нике, забаненный/приостановленный канал) и показываем
+  // понятную ошибку вместо бесконечного "переподключение..." — с растущей
+  // паузой между попытками это уже больше 10 минут ожидания к этому моменту.
+  const MAX_RECONNECT_ATTEMPTS = 8;
 
   function clearReconnect(){
     if (reconnectTimer){ clearTimeout(reconnectTimer); reconnectTimer = null; }
@@ -1263,8 +1298,12 @@
   function scheduleReconnect(fn, myGen){
     clearReconnect();
     reconnectAttempts++;
+    if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS){
+      setStatus('err', 'не удалось переподключиться к чату', 'проверьте никнейм/ID канала и перезагрузите страницу, чтобы попробовать снова');
+      return;
+    }
     const delaySec = Math.min(20, Math.round(Math.pow(1.7, reconnectAttempts)));
-    setStatus('connecting', 'связь оборвалась, переподключение через ' + delaySec + ' с…', 'попытка ' + reconnectAttempts);
+    setStatus('connecting', 'связь оборвалась, переподключение через ' + delaySec + ' с…', 'попытка ' + reconnectAttempts + ' из ' + MAX_RECONNECT_ATTEMPTS);
     reconnectTimer = setTimeout(() => {
       if (myGen !== connectionGen) return; // соединение уже переоткрыли вручную
       fn();
@@ -1649,6 +1688,7 @@
     el.heroCount.textContent = entrants.size;
     el.drawBtn.disabled = eligibleEntrants().length === 0 || drawing;
     syncParticles();
+    saveParticipants();
   }
 
   function eligibleEntrants(){
@@ -1689,6 +1729,7 @@
       const key = username.toLowerCase();
       if (entrants.has(key)){
         entrantMessages.set(key, content);
+        saveParticipants();
       } else if (entrants.size < MAX_ENTRANTS){
         entrantMessages.set(key, content);
         entrants.set(key, username);
@@ -1934,7 +1975,7 @@
     }
   }
 
-  el.connectBtn.addEventListener('click', connectToChannel);
+  el.manualConnectBtn.addEventListener('click', connectToChannel);
   el.manualId.addEventListener('keydown', (e) => { if (e.key === 'Enter') connectToChannel(); });
 
   /* ---------------- вступительный экран: ввод и проверка канала Kick ---------------- */
