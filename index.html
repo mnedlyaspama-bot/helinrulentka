@@ -745,6 +745,7 @@
     border-radius:14px;
     background:rgba(9,11,17,0.65);
     border:1px solid transparent;
+    box-shadow:0 0 24px rgba(255,209,102,0.16);
     margin:0;
     transition:
       height .32s cubic-bezier(.22,.61,.36,1),
@@ -909,6 +910,10 @@
   }
   .decor-galaxy-panel{ transition:opacity 1s ease; }
   body.app-hidden .decor-galaxy-panel{ opacity:0; }
+  /* режим "слабое устройство" — декоративная фоновая галактика вообще не
+     рисуется (см. lowPowerMode в скрипте), а сам её контейнер прячем,
+     чтобы не оставалось пустого прозрачного слоя поверх макета. */
+  body.low-power-mode .decor-galaxy-panel{ display:none; }
 
   .splash-screen{
     position:fixed;
@@ -1163,6 +1168,14 @@
           <input type="checkbox" id="excludeWinners" checked>
           <label for="excludeWinners" style="margin:0;">Не давать выигрывать повторно за сессию</label>
         </div>
+        <div class="row-check">
+          <input type="checkbox" id="skipAnimation">
+          <label for="skipAnimation" style="margin:0;">Пропустить анимацию</label>
+        </div>
+        <div class="row-check">
+          <input type="checkbox" id="lowPowerMode">
+          <label for="lowPowerMode" style="margin:0;">Убрать фоновую галактику</label>
+        </div>
         <div class="connect-spacer"></div>
 
         <div class="fallback" id="fallbackBox">
@@ -1291,6 +1304,8 @@
     winnersCount: document.getElementById('winnersCountInput'),
     exact: document.getElementById('exactMatch'),
     excludeWinners: document.getElementById('excludeWinners'),
+    skipAnimation: document.getElementById('skipAnimation'),
+    lowPower: document.getElementById('lowPowerMode'),
     manualConnectBtn: document.getElementById('manualConnectBtn'),
     fallbackBox: document.getElementById('fallbackBox'),
     manualId: document.getElementById('manualId'),
@@ -1312,6 +1327,41 @@
     rouletteTag: document.getElementById('rouletteTag'),
     rouletteTrack: document.getElementById('rouletteTrack'),
   };
+
+  /* ---------------- "пропустить анимацию" и "слабое устройство" ----------
+     Оба флажка — это предпочтения зрителя/стримера по нагрузке на
+     устройство, а не разовые опции розыгрыша, поэтому, как и список
+     участников, они запоминаются в localStorage и переживают перезагрузку
+     страницы (например, OBS периодически перезагружает browser source). */
+  const SKIP_ANIMATION_KEY = 'kickRaffleSkipAnimation_v1';
+  const LOW_POWER_KEY = 'kickRaffleLowPower_v1';
+
+  // lowPowerMode читается декоративной галактикой (galaxy2) на каждый кадр,
+  // поэтому это обычная переменная верхнего уровня, а не только состояние
+  // чекбокса — так до неё дёшево достучаться из глубины initDecorGalaxy.
+  let lowPowerMode = false;
+  // Заполняется внутри initDecorGalaxy(): функция, которая заново
+  // запускает rAF-цикл фоновой галактики после того, как он был остановлен
+  // включением "слабого устройства".
+  let resumeDecorGalaxy = null;
+
+  try { el.skipAnimation.checked = localStorage.getItem(SKIP_ANIMATION_KEY) === '1'; } catch(e){}
+  try { el.lowPower.checked = localStorage.getItem(LOW_POWER_KEY) === '1'; } catch(e){}
+  lowPowerMode = el.lowPower.checked;
+  document.body.classList.toggle('low-power-mode', lowPowerMode);
+
+  el.skipAnimation.addEventListener('change', () => {
+    try { localStorage.setItem(SKIP_ANIMATION_KEY, el.skipAnimation.checked ? '1' : '0'); } catch(e){}
+  });
+
+  el.lowPower.addEventListener('change', () => {
+    lowPowerMode = el.lowPower.checked;
+    try { localStorage.setItem(LOW_POWER_KEY, lowPowerMode ? '1' : '0'); } catch(e){}
+    document.body.classList.toggle('low-power-mode', lowPowerMode);
+    // Выключили режим — декоративная галактика сама себя остановила на
+    // следующем кадре (см. frame2), её rAF-цикл нужно перезапустить вручную.
+    if (!lowPowerMode && resumeDecorGalaxy) resumeDecorGalaxy();
+  });
 
   let ws = null;
   let entrants = new Map();   // key(lower) -> displayName
@@ -1372,7 +1422,7 @@
   // роста entrants/particles при огромном флешмобе в чате — без лимита каждый
   // новый ник добавлял бы ещё одну точку в галактику навсегда, и на очень
   // больших числах (десятки тысяч) это начало бы просаживать FPS анимации.
-  const MAX_ENTRANTS = 500;
+  const MAX_ENTRANTS = 5000;
 
   /* ---------------- автопереподключение к чату ----------------
      Раньше при обрыве соединения (сеть моргнула, Pusher/Twitch разорвали
@@ -2782,6 +2832,23 @@
     setTimeout(() => { if (run === rouletteRun) runRouletteSequence(winnerKeys,run); }, 260);
   }
 
+  // "пропустить анимацию": тот же выбор победителей, что и в beginReveal(),
+  // но без сближения звёзд и без прокрутки рулетки — победители показываются
+  // сразу же после клика на «Крутить».
+  function instantDraw(){
+    const pool = eligibleEntrants();
+    const poolCopy = pool.slice();
+    const count = Math.max(1, Math.min(poolCopy.length, currentDrawCount));
+    winnerKeys = [];
+    for (let i = 0; i < count; i++){
+      const idx = randomIndex(poolCopy.length);
+      winnerKeys.push(poolCopy[idx]);
+      poolCopy.splice(idx, 1);
+    }
+    showWinners(winnerKeys);
+    finishAfterRoulette();
+  }
+
   function rouletteNamePool(){
     const names = [];
     entrants.forEach((name) => names.push(name));
@@ -2880,12 +2947,15 @@
     drawing = true;
     el.drawBtn.disabled = true;
 
-    // Раньше здесь была отдельная ветка для reduceMotion (системная настройка
-    // "уменьшить анимацию" в Windows/macOS/браузере), которая выбирала
-    // победителя мгновенно, без анимации сближения звёзд и рулетки. Теперь
-    // розыгрыш всегда крутит полную анимацию, даже если у зрителя/стримера
-    // в системе отключены анимации — это стриминговый виджет, интрига важнее
-    // системной настройки доступности.
+    // Ручной флажок "пропустить анимацию" в настройках — в отличие от
+    // системной настройки reduceMotion (которую сознательно игнорируем,
+    // см. instantDraw), это явный выбор зрителя/стримера прямо в виджете,
+    // так что уважаем его и показываем победителя сразу же.
+    if (el.skipAnimation.checked){
+      instantDraw();
+      return;
+    }
+
     animState = 'gather';
     stateStart = performance.now();
 
@@ -3025,7 +3095,7 @@
     const rerollBtn = document.createElement('button');
     rerollBtn.type = 'button';
     rerollBtn.className = 'ghost small rw-reroll';
-    rerollBtn.textContent = 'не ответил(а)';
+    rerollBtn.textContent = 'не ответил(а) — выбрать другого';
     // Перевыбор имеет смысл, только когда победителей несколько — если
     // разыгрывается один приз, "заменить" его больше не на кого из этого
     // же розыгрыша, а рулетка на весь пул участников уже есть в кнопке
@@ -3156,7 +3226,7 @@
     // и только когда оно полностью раскрылось — запускается сама прокрутка
     // имён, чтобы анимация не выглядела рваной.
     const REVEAL_MS = 300;
-    const RESULT_HOLD_MS = 500; // дать разглядеть, кто выпал, прежде чем свернуть окно
+    const RESULT_HOLD_MS = 1100; // дать разглядеть, кто выпал, прежде чем свернуть окно
     function spinMiniRoulette(oldKey, newKey, idx){
       const newName = entrants.get(newKey) || newKey;
       rerollWindow.classList.add('show');
@@ -3367,6 +3437,10 @@
     }
 
     function frame2(t){
+      // "слабое устройство": не тратим кадр на рисование и не планируем
+      // следующий — цикл rAF просто останавливается здесь до тех пор, пока
+      // resumeDecorGalaxy() не перезапустит его (см. переключатель lowPower).
+      if (lowPowerMode) return;
       if (!W2 || !H2){ rafWhenVisible(frame2); return; }
       syncNameDots2();
       rotation2 += 0.000012 * 16;
@@ -3542,7 +3616,10 @@
     }
 
     resizeCanvas2();
-    rafWhenVisible(frame2);
+    resumeDecorGalaxy = () => rafWhenVisible(frame2);
+    // При загрузке страницы с уже включённым "слабым устройством" цикл
+    // вообще не стартует — нечего останавливать и незачем тратить кадр.
+    if (!lowPowerMode) resumeDecorGalaxy();
   })();
 
   renderEntrants();
