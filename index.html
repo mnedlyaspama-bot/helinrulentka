@@ -2090,8 +2090,6 @@
   const ROULETTE_PAUSE_MS = 650; // пауза между прокрутками, если победителей несколько
   const ROULETTE_ROW_H = 44;
 
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
   function makeBgStar(){
     return {
       angle: Math.random() * Math.PI * 2,
@@ -2604,23 +2602,12 @@
     drawing = true;
     el.drawBtn.disabled = true;
 
-    if (reduceMotion){
-      const poolCopy = pool.slice();
-      const keys = [];
-      for (let i = 0; i < currentDrawCount; i++){
-        const idx = randomIndex(poolCopy.length);
-        keys.push(poolCopy[idx]);
-        poolCopy.splice(idx, 1);
-      }
-      winnerKeys = keys;
-      animState = 'done';
-      showWinners(keys);
-      keys.forEach((k) => excluded.add(k));
-      drawing = false;
-      renderEntrants();
-      return;
-    }
-
+    // Раньше здесь была отдельная ветка для reduceMotion (системная настройка
+    // "уменьшить анимацию" в Windows/macOS/браузере), которая выбирала
+    // победителя мгновенно, без анимации сближения звёзд и рулетки. Теперь
+    // розыгрыш всегда крутит полную анимацию, даже если у зрителя/стримера
+    // в системе отключены анимации — это стриминговый виджет, интрига важнее
+    // системной настройки доступности.
     animState = 'gather';
     stateStart = performance.now();
 
