@@ -1138,6 +1138,26 @@
 </div>
 
 <script>
+  /* ---------------- пауза анимаций, когда вкладка не видна ----------------
+     Обе галактики (galaxy и galaxy2) раньше крутились через requestAnimationFrame
+     без остановки, даже если вкладка свёрнута/неактивна — это грузило GPU/CPU
+     фонового процесса браузера и мешало другим вкладкам (например, стриму).
+     rafWhenVisible(fn) планирует следующий кадр как обычно, пока вкладка видна,
+     а если вкладка скрыта — откладывает запуск до события visibilitychange,
+     вместо того чтобы продолжать рисовать кадры впустую. */
+  function rafWhenVisible(fn){
+    if (document.hidden){
+      const resume = () => {
+        if (!document.hidden){
+          document.removeEventListener('visibilitychange', resume);
+          requestAnimationFrame(fn);
+        }
+      };
+      document.addEventListener('visibilitychange', resume);
+      return;
+    }
+    requestAnimationFrame(fn);
+  }
 (function(){
   const PUSHER_URL = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=7.4.0&flash=false';
   const TWITCH_IRC_URL = 'wss://irc-ws.chat.twitch.tv:443';
@@ -2045,7 +2065,7 @@
   const canvas = document.getElementById('galaxy');
   const ctx = canvas.getContext('2d');
   const wrap = canvas.parentElement;
-  let W = 0, H = 0, DPR = Math.max(1, window.devicePixelRatio || 1);
+  let W = 0, H = 0, DPR = Math.min(1.5, Math.max(1, window.devicePixelRatio || 1));
   // палитра для участников — без белого, чтобы точки участников выделялись
   // на фоне россыпи белых фоновых звёзд
   const palette = ['#8ab4ff', '#b98aff', '#53fc18', '#6ee7ff', '#ff8ac2', '#ffd166'];
@@ -2086,7 +2106,7 @@
 
   function resizeCanvas(){
     const nextW = wrap.clientWidth, nextH = wrap.clientHeight;
-    const nextDPR = Math.max(1, window.devicePixelRatio || 1);
+    const nextDPR = Math.min(1.5, Math.max(1, window.devicePixelRatio || 1));
     if (!nextW || !nextH || (nextW === W && nextH === H && nextDPR === DPR)) return;
     const sx = W ? nextW / W : 1, sy = H ? nextH / H : 1;
     particles.forEach(p => {
@@ -2214,7 +2234,7 @@
 
     if (animState === 'merged' || animState === 'roulette'){
       drawMergedStar(now, 1);
-      requestAnimationFrame(frame);
+      rafWhenVisible(frame);
       return;
     }
 
@@ -2257,7 +2277,7 @@
       p._x = pos.x; p._y = pos.y;
     });
     if (active) drawMergedStar(now, compression);
-    requestAnimationFrame(frame);
+    rafWhenVisible(frame);
   }
 
   function drawMergedStar(now, opacity){
@@ -2393,7 +2413,7 @@
 
   function easeOutCubic(x){ return 1 - Math.pow(1 - x, 3); }
 
-  requestAnimationFrame((t) => { lastT = t; requestAnimationFrame(frame); });
+  requestAnimationFrame((t) => { lastT = t; rafWhenVisible(frame); });
 
   /* ---------------- draw flow ---------------- */
 
@@ -2857,7 +2877,7 @@
     if (!canvas2) return;
     const ctx2 = canvas2.getContext('2d');
     const wrap2 = canvas2.parentElement;
-    let W2 = 0, H2 = 0, DPR2 = Math.max(1, window.devicePixelRatio || 1);
+    let W2 = 0, H2 = 0, DPR2 = Math.min(1.5, Math.max(1, window.devicePixelRatio || 1));
 
     let bgStars2 = [];
     let dust2 = [];             // мелкая пыль спиральных рукавов, чисто декоративная
@@ -2866,7 +2886,7 @@
 
     function resizeCanvas2(){
       const nextW = wrap2.clientWidth, nextH = wrap2.clientHeight;
-      const nextDPR = Math.max(1, window.devicePixelRatio || 1);
+      const nextDPR = Math.min(1.5, Math.max(1, window.devicePixelRatio || 1));
       if (!nextW || !nextH || (nextW === W2 && nextH === H2 && nextDPR === DPR2)) return;
       W2 = nextW; H2 = nextH; DPR2 = nextDPR;
       canvas2.width = Math.round(W2 * DPR2);
@@ -2949,7 +2969,7 @@
     }
 
     function frame2(t){
-      if (!W2 || !H2){ requestAnimationFrame(frame2); return; }
+      if (!W2 || !H2){ rafWhenVisible(frame2); return; }
       syncNameDots2();
       rotation2 += 0.000012 * 16;
 
@@ -3011,7 +3031,7 @@
         if (label) drawNamePill2(x, y - size - 8, label, Math.min(0.85, alpha + 0.2), s.color);
       });
 
-      requestAnimationFrame(frame2);
+      rafWhenVisible(frame2);
     }
 
     // Как и на главной канве с частицами: ctx.shadowBlur на сотнях точек в
@@ -3124,7 +3144,7 @@
     }
 
     resizeCanvas2();
-    requestAnimationFrame(frame2);
+    rafWhenVisible(frame2);
   })();
 
   renderEntrants();
