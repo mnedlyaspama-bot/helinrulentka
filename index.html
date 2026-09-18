@@ -674,7 +674,7 @@
     background:var(--panel-solid);
     border:1px solid var(--line);
     border-radius:var(--r-lg);
-    padding:18px;
+    padding:0 18px 18px;
     box-shadow:0 16px 50px rgba(0,0,0,0.55);
   }
   .winner-reactions.show .feed{
@@ -718,12 +718,101 @@
     color:var(--muted);
   }
   .rw-page{ min-width:44px; text-align:center; }
+  .rw-reroll{
+    display:block;
+    width:100%;
+    margin:10px 0 4px;
+    text-align:center;
+  }
+  .rw-reroll-note{
+    min-height:16px;
+    text-align:center;
+    margin:0 0 6px;
+  }
+
+  /* Мини-рулетка внутри окна "слова победителя" — та же визуальная механика,
+     что и у главной рулетки (roulette-window/track/row), но компактнее и
+     встроена в панель вместо полноэкранного оверлея. Раньше окно менялось
+     через display:none → display:block резким скачком; теперь высота,
+     прозрачность и цвет рамки анимируются, так что окно плавно
+     разворачивается и складывается обратно. */
+  .rw-reroll-window{
+    position:relative;
+    width:100%;
+    height:0;
+    opacity:0;
+    overflow:hidden;
+    border-radius:14px;
+    background:rgba(9,11,17,0.65);
+    border:1px solid transparent;
+    box-shadow:0 0 24px rgba(255,209,102,0.16);
+    margin:0;
+    transition:
+      height .32s cubic-bezier(.22,.61,.36,1),
+      opacity .28s ease,
+      margin .32s cubic-bezier(.22,.61,.36,1),
+      border-color .28s ease;
+  }
+  .rw-reroll-window.show{
+    height:96px;
+    opacity:1;
+    margin:10px 0 4px;
+    border-color:rgba(255,255,255,0.12);
+  }
+  .rw-reroll-track{
+    position:absolute;
+    left:0; right:0; top:0;
+    display:flex;
+    flex-direction:column;
+  }
+  .rw-reroll-row{
+    height:32px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:var(--display);
+    font-weight:700;
+    font-size:14px;
+    color:#fff;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    padding:0 10px;
+    text-shadow:0 0 10px rgba(255,255,255,0.3);
+  }
+  .rw-reroll-highlight{
+    position:absolute;
+    left:1px; right:1px; top:50%;
+    height:32px;
+    transform:translateY(-50%);
+    border-top:1px solid rgba(255,209,102,0.55);
+    border-bottom:1px solid rgba(255,209,102,0.55);
+    background:linear-gradient(180deg, rgba(255,209,102,0.02), rgba(255,209,102,0.11), rgba(255,209,102,0.02));
+    pointer-events:none;
+  }
+  .rw-reroll-window::after{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:linear-gradient(180deg, rgba(9,11,17,0.95), rgba(9,11,17,0) 30%, rgba(9,11,17,0) 70%, rgba(9,11,17,0.95));
+    pointer-events:none;
+  }
+  /* Раньше у h2 не было своего отступа (padding), только текст на всю
+     ширину панели с внешним padding:18px у самой панели — то есть перетащить
+     окно можно было, только точно попав курсором на строку текста, а "пустая"
+     область сверху панели (то, что визуально выглядит как заголовок) на
+     самом деле draggable-обработчик не покрывала. Теперь h2 растянут на всю
+     ширину панели (отрицательный margin компенсирует padding панели) и имеет
+     собственный вертикальный padding — получается настоящая "шапка" окна,
+     перетаскивать можно, зацепившись за любую точку по всей верхней полосе. */
   .winner-reactions h2{
     font-size:13px;
     color:var(--muted);
     font-family:var(--mono);
     font-weight:400;
-    margin:0 0 14px;
+    margin:0 -18px 14px;
+    padding:16px 18px 12px;
+    border-radius:var(--r-lg) var(--r-lg) 0 0;
     cursor:grab;
     user-select:none;
     touch-action:none;
@@ -2645,9 +2734,8 @@
     return names;
   }
 
-  function buildRouletteReel(targetName){
+  function buildRouletteReel(targetName, totalRows = 26){
     const pool = rouletteNamePool();
-    const totalRows = 26;
     const rows = [];
     for (let i = 0; i < totalRows - 1; i++){
       rows.push(pool[Math.floor(Math.random() * pool.length)]);
@@ -2854,6 +2942,36 @@
     timerEl.appendChild(timerText);
     panel.appendChild(timerEl);
 
+    // Раньше единственный способ заменить не ответившего победителя —
+    // заново перекручивать всю рулетку на все N победителей. Эта кнопка
+    // перевыбирает только текущую (открытую в данный момент) вкладку:
+    // новый победитель берётся случайно из ещё не выбранных в этом розыгрыше
+    // участников, а не ответивший освобождается (перестаёт быть в
+    // "excluded"), чтобы у него остался шанс выиграть в следующий раз.
+    const rerollBtn = document.createElement('button');
+    rerollBtn.type = 'button';
+    rerollBtn.className = 'ghost small rw-reroll';
+    rerollBtn.textContent = 'не ответил(а)';
+    // Перевыбор имеет смысл, только когда победителей несколько — если
+    // разыгрывается один приз, "заменить" его больше не на кого из этого
+    // же розыгрыша, а рулетка на весь пул участников уже есть в кнопке
+    // "Крутить".
+    if (winners.length > 1) panel.appendChild(rerollBtn);
+
+    const rerollWindow = document.createElement('div');
+    rerollWindow.className = 'rw-reroll-window';
+    const rerollTrack = document.createElement('div');
+    rerollTrack.className = 'rw-reroll-track';
+    rerollWindow.appendChild(rerollTrack);
+    const rerollHighlight = document.createElement('div');
+    rerollHighlight.className = 'rw-reroll-highlight';
+    rerollWindow.appendChild(rerollHighlight);
+    panel.appendChild(rerollWindow);
+
+    const rerollNote = document.createElement('div');
+    rerollNote.className = 'hint rw-reroll-note';
+    panel.appendChild(rerollNote);
+
     const feed = document.createElement('div');
     feed.className = 'feed';
     panel.appendChild(feed);
@@ -2912,6 +3030,119 @@
       renderFeed();
       updateTimer();
     }
+
+    let rerollNoteTimer = null;
+    function showRerollNote(text){
+      rerollNote.textContent = text;
+      clearTimeout(rerollNoteTimer);
+      rerollNoteTimer = setTimeout(() => { rerollNote.textContent = ''; }, 3500);
+    }
+
+    const MINI_ROULETTE_ROW_H = 32;
+    const MINI_ROULETTE_ROWS = 16;
+    const MINI_ROULETTE_MS = 900;
+
+    // Применяет уже выбранного нового победителя вместо старого во всех
+    // местах, где отображается его имя (вкладка, окно слов победителя,
+    // надпись "ПОБЕДИТЕЛЬ", история) — вызывается после того, как
+    // отыграется мини-рулетка.
+    function applyReroll(oldKey, newKey, idx){
+      const newName = entrants.get(newKey) || newKey;
+
+      // не ответивший освобождается (получает шанс выиграть в другой раз),
+      // а новый победитель занимает его место в списке исключённых
+      excluded.delete(oldKey);
+      excluded.add(newKey);
+
+      const wkIdx = winnerKeys.indexOf(oldKey);
+      if (wkIdx !== -1) winnerKeys[wkIdx] = newKey;
+
+      winners[idx] = {
+        key: newKey,
+        displayName: newName,
+        startTime: performance.now(),
+        stopped: false,
+        elapsedAtStop: 0,
+        messages: [],
+      };
+
+      tabEls[idx].textContent = newName;
+
+      const entryNameEls = el.winnersList.querySelectorAll('.winner-entry .name');
+      if (entryNameEls[idx]) entryNameEls[idx].textContent = newName;
+
+      addHistoryEntries([newKey]);
+      renderEntrants();
+      setActiveIndex(idx);
+    }
+
+    // Крутит мини-рулетку (та же механика, что у главной, но компактнее и
+    // встроена в панель) и по её завершении применяет замену победителя.
+    // Окно сначала плавно разворачивается (см. CSS-переход у .rw-reroll-window),
+    // и только когда оно полностью раскрылось — запускается сама прокрутка
+    // имён, чтобы анимация не выглядела рваной.
+    const REVEAL_MS = 300;
+    const RESULT_HOLD_MS = 500; // дать разглядеть, кто выпал, прежде чем свернуть окно
+    function spinMiniRoulette(oldKey, newKey, idx){
+      const newName = entrants.get(newKey) || newKey;
+      const rows = buildRouletteReel(newName, MINI_ROULETTE_ROWS);
+      rerollTrack.innerHTML = '';
+      rows.forEach((name) => {
+        const row = document.createElement('div');
+        row.className = 'rw-reroll-row';
+        row.textContent = name;
+        rerollTrack.appendChild(row);
+      });
+      rerollTrack.style.transform = 'translateY(0px)';
+      rerollWindow.classList.add('show');
+
+      const finalOffset = (rows.length - 3) * MINI_ROULETTE_ROW_H;
+      setTimeout(() => {
+        const start = performance.now();
+        function step(now){
+          const p = Math.min(1, (now - start) / MINI_ROULETTE_MS);
+          const eased = 1 - Math.pow(1 - p, 4); // резко разгоняется, плавно тормозит к финалу
+          rerollTrack.style.transform = 'translateY(' + (-finalOffset * eased) + 'px)';
+          if (p < 1){
+            requestAnimationFrame(step);
+          } else {
+            // рулетка остановилась на имени — держим окно открытым ещё
+            // немного, чтобы результат было видно, и только потом сворачиваем
+            setTimeout(() => {
+              rerollWindow.classList.remove('show');
+              rerollBtn.disabled = false;
+              applyReroll(oldKey, newKey, idx);
+            }, RESULT_HOLD_MS);
+          }
+        }
+        requestAnimationFrame(step);
+      }, REVEAL_MS);
+    }
+
+    // Перевыбирает только победителя на текущей открытой вкладке — вместо
+    // того чтобы заново крутить рулетку на всех N победителей, если
+    // откликнулся не каждый. Новый победитель берётся случайно из тех, кто
+    // ещё не выбран в этом розыгрыше (учитывая и "не давать выигрывать
+    // повторно", и уже выбранных в этом же батче).
+    function rerollActiveWinner(){
+      if (rerollBtn.disabled) return;
+      const idx = reactionPanel.activeIndex;
+      const oldWinner = winners[idx];
+      if (!oldWinner) return;
+
+      const takenKeys = new Set(winners.map(w => w.key));
+      const pool = eligibleEntrants().filter(k => !takenKeys.has(k));
+      if (!pool.length){
+        showRerollNote('нет других участников для замены');
+        return;
+      }
+
+      const newKey = pool[randomIndex(pool.length)];
+      rerollBtn.disabled = true;
+      spinMiniRoulette(oldWinner.key, newKey, idx);
+    }
+
+    rerollBtn.addEventListener('click', rerollActiveWinner);
 
     reactionPanel.renderFeed = renderFeed;
     reactionPanel.updateTimer = updateTimer;
