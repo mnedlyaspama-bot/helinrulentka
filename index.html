@@ -1229,6 +1229,47 @@
   let entrants = new Map();   // key(lower) -> displayName
   let entrantMessages = new Map(); // key(lower) -> последнее сообщение со словом для участия
   let excluded = new Set();
+
+  // Максимум уникальных участников за один розыгрыш. Защита от неограниченного
+  // роста entrants/particles при огромном флешмобе в чате — без лимита каждый
+  // новый ник добавлял бы ещё одну точку в галактику навсегда, и на очень
+  // больших числах (десятки тысяч) это начало бы просаживать FPS анимации.
+  const MAX_ENTRANTS = 5000;
+
+  /* ---------------- автопереподключение к чату ----------------
+     Раньше при обрыве соединения (сеть моргнула, Pusher/Twitch разорвали
+     сокет) виджет просто показывал статус "отключено" и молча переставал
+     считать участников, пока кто-то не нажимал "Переподключиться к чату"
+     руками. Для живого розыгрыша это значит, что часть зрителей могла
+     не попасть в розыгрыш незамеченно. Теперь при любом неожиданном закрытии
+     сокета виджет сам пробует переподключиться с растущей паузой между
+     попытками (экспоненциальный backoff, до 20 секунд), пока не получится.
+
+     connectionGen — счётчик "поколений" соединения: при каждом новом вызове
+     connectKickWebSocket/connectTwitchIRC (в том числе ручном клике
+     "Переподключиться") он увеличивается, и старое соединение запоминает
+     свой номер. Если к моменту срабатывания onclose/таймера номер уже не
+     совпадает с текущим — значит соединение переоткрыли вручную, и повторно
+     переподключаться по старому не нужно (иначе получили бы два параллельных
+     цикла переподключения). */
+  let reconnectTimer = null;
+  let reconnectAttempts = 0;
+  let connectionGen = 0;
+
+  function clearReconnect(){
+    if (reconnectTimer){ clearTimeout(reconnectTimer); reconnectTimer = null; }
+  }
+
+  function scheduleReconnect(fn, myGen){
+    clearReconnect();
+    reconnectAttempts++;
+    const delaySec = Math.min(20, Math.round(Math.pow(1.7, reconnectAttempts)));
+    setStatus('connecting', 'связь оборвалась, переподключение через ' + delaySec + ' с…', 'попытка ' + reconnectAttempts);
+    reconnectTimer = setTimeout(() => {
+      if (myGen !== connectionGen) return; // соединение уже переоткрыли вручную
+      fn();
+    }, delaySec * 1000);
+  }
   let reactionPanel = null; // единая плавающая панель "слова победителя" с вкладками на всех победителей
   let drawing = false;
 
@@ -1646,13 +1687,21 @@
 
     if (isMatch){
       const key = username.toLowerCase();
-      entrantMessages.set(key, content);
-      if (!entrants.has(key)){
+      if (entrants.has(key)){
+        entrantMessages.set(key, content);
+      } else if (entrants.size < MAX_ENTRANTS){
+        entrantMessages.set(key, content);
         entrants.set(key, username);
         renderEntrants();
+      } else if (!entrantsCapWarned){
+        // Лимит участников достигнут — защита от неограниченного роста
+        // entrants/particles при огромном флешмобе в чате (см. MAX_ENTRANTS).
+        entrantsCapWarned = true;
+        logLine('система', 'достигнут лимит участников (' + MAX_ENTRANTS + '), новые ники больше не добавляются в этот розыгрыш', false);
       }
     }
   }
+  let entrantsCapWarned = false;
 
   /* ---------------- connection ---------------- */
 
@@ -1664,7 +1713,10 @@
     return json.chatroom.id;
   }
 
-  function connectKickWebSocket(chatroomId){
+  function connectKickWebSocket(chatroomId, isRetry){
+    if (!isRetry) reconnectAttempts = 0;
+    clearReconnect();
+    const myGen = ++connectionGen;
     setStatus('connecting', 'подключение к чату…', '');
     ws = new WebSocket(PUSHER_URL);
 
@@ -1701,6 +1753,7 @@
 
       if (outer.event === 'pusher_internal:subscription_succeeded'){
         if (outer.channel) subscribed.push(outer.channel);
+        reconnectAttempts = 0; // соединение стабильно установлено — сбрасываем счётчик backoff
         updateLiveDetail();
         return;
       }
@@ -1716,7 +1769,6 @@
         let data;
         try { data = JSON.parse(outer.data); } catch(e){ console.warn('не удалось разобрать data', outer); return; }
         const parsed = extractChatMessage(data);
-        console.log('kick chat event:', outer.event, data);
         if (parsed){
           chatSeen++;
           if (subscribed.length) updateLiveDetail();
@@ -1727,7 +1779,10 @@
     };
 
     ws.onerror = () => setStatus('err', 'ошибка соединения', 'проверьте ID чата и подключение к интернету');
-    ws.onclose = () => setStatus('idle', 'отключено', '');
+    ws.onclose = () => {
+      if (myGen !== connectionGen) return; // соединение уже переоткрыли вручную — не плодим второй цикл реконнекта
+      scheduleReconnect(() => connectKickWebSocket(chatroomId, true), myGen);
+    };
   }
 
   // Kick присылает сообщения чата в разных форматах в зависимости от версии клиента —
@@ -1750,7 +1805,10 @@
   // публичный IRC-over-WebSocket с "гостевым" ником вида justinfanXXXXX
   // (стандартный приём, которым пользуются оверлеи и боты-читалки чата;
   // отправлять сообщения так нельзя, но для розыгрыша нужно только читать).
-  function connectTwitchIRC(channel){
+  function connectTwitchIRC(channel, isRetry){
+    if (!isRetry) reconnectAttempts = 0;
+    clearReconnect();
+    const myGen = ++connectionGen;
     setStatus('connecting', 'подключение к чату…', '');
     const socket = new WebSocket(TWITCH_IRC_URL);
     ws = socket;
@@ -1778,6 +1836,7 @@
 
         if (!joined && (/ 366 /.test(line) || / JOIN #/.test(line))){
           joined = true;
+          reconnectAttempts = 0; // канал успешно подключён — сбрасываем счётчик backoff
           updateLiveDetail();
         }
 
@@ -1797,7 +1856,10 @@
     };
 
     socket.onerror = () => setStatus('err', 'ошибка соединения', 'проверьте никнейм канала и подключение к интернету');
-    socket.onclose = () => setStatus('idle', 'отключено', '');
+    socket.onclose = () => {
+      if (myGen !== connectionGen) return; // соединение уже переоткрыли вручную — не плодим второй цикл реконнекта
+      scheduleReconnect(() => connectTwitchIRC(channel, true), myGen);
+    };
   }
 
   // Разбор строки Twitch IRC вида:
@@ -1828,12 +1890,24 @@
   }
 
   function disconnect(){
+    clearReconnect();
+    connectionGen++; // делает соединение, которое сейчас закрываем, "устаревшим" — его onclose больше не будет пытаться переподключиться сам
     if (ws){ try { ws.close(); } catch(e){} ws = null; }
   }
 
   function updateManualUrl(){
+    // Раньше ссылка собиралась строкой через innerHTML — с encodeURIComponent
+    // это уже было безопасно от разметки, но правильнее строить DOM-узел
+    // напрямую, как и весь остальной код на странице, а не собирать HTML
+    // из строк вручную.
     const manualUrl = 'https://kick.com/api/v2/channels/' + encodeURIComponent(CHANNEL_SLUG || '');
-    el.manualLinkWrap.innerHTML = '<a href="' + manualUrl + '" target="_blank" rel="noopener">' + manualUrl + '</a>';
+    el.manualLinkWrap.innerHTML = '';
+    const a = document.createElement('a');
+    a.href = manualUrl;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = manualUrl;
+    el.manualLinkWrap.appendChild(a);
   }
   updateManualUrl();
 
@@ -2048,6 +2122,7 @@
     entrants.clear();
     entrantMessages.clear();
     excluded.clear();
+    entrantsCapWarned = false;
     hideWinner();
     renderEntrants();
   });
