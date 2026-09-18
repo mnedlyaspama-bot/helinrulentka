@@ -3225,7 +3225,7 @@
     // и только когда оно полностью раскрылось — запускается сама прокрутка
     // имён, чтобы анимация не выглядела рваной.
     const REVEAL_MS = 300;
-    const RESULT_HOLD_MS = 1100; // дать разглядеть, кто выпал, прежде чем свернуть окно
+    const RESULT_HOLD_MS = 500; // дать разглядеть, кто выпал, прежде чем свернуть окно
     function spinMiniRoulette(oldKey, newKey, idx){
       const newName = entrants.get(newKey) || newKey;
       rerollWindow.classList.add('show');
