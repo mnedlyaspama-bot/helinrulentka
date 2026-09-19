@@ -1366,6 +1366,11 @@
   let entrants = new Map();   // key(lower) -> displayName
   let entrantMessages = new Map(); // key(lower) -> последнее сообщение со словом для участия
   let excluded = new Set();
+  // Счётчик «версии» состава участников: растёт при каждом изменении entrants
+  // (см. renderEntrants). Обе галактики сверяют его раз за кадр и пересобирают
+  // свои частицы только если состав реально поменялся, а не на каждое
+  // сообщение чата и не на каждый кадр (при 1000 участниках это O(n) впустую).
+  let entrantsRev = 0;
 
   /* ---------------- сохранение участников между перезагрузками страницы ----
      Раньше список участников жил только в памяти вкладки: обновление
@@ -1393,16 +1398,32 @@
   // SAVE_DEBOUNCE_MS после последнего изменения, и сколько бы сообщений ни
   // пришло за это время — localStorage.setItem() выполнится один раз.
   const SAVE_DEBOUNCE_MS = 400;
+  // Но при непрерывном потоке сообщений (тысяча человек пишет слово подряд)
+  // «тишины» в 400 мс может не наступать минутами — тогда запись откладывалась
+  // бы бесконечно и при сбое вкладки список пропал бы. Поэтому ожидание
+  // ограничено сверху: не позже чем через SAVE_MAX_WAIT_MS после первого
+  // несохранённого изменения запись всё равно произойдёт.
+  const SAVE_MAX_WAIT_MS = 3000;
   let saveParticipantsTimer = null;
-  function saveParticipants(){
+  let saveFirstPendingAt = 0;
+  function flushSaveParticipants(){
     clearTimeout(saveParticipantsTimer);
-    saveParticipantsTimer = setTimeout(saveParticipantsNow, SAVE_DEBOUNCE_MS);
+    saveParticipantsTimer = null;
+    saveParticipantsNow();
+  }
+  function saveParticipants(){
+    const now = performance.now();
+    if (saveParticipantsTimer === null) saveFirstPendingAt = now;
+    clearTimeout(saveParticipantsTimer);
+    const wait = Math.max(0, Math.min(SAVE_DEBOUNCE_MS, SAVE_MAX_WAIT_MS - (now - saveFirstPendingAt)));
+    saveParticipantsTimer = setTimeout(flushSaveParticipants, wait);
   }
   // ...но если вкладку закрывают/обновляют посреди всплеска — не теряем
   // последние несохранённые изменения, дописываем немедленно.
-  window.addEventListener('beforeunload', () => {
-    clearTimeout(saveParticipantsTimer);
-    saveParticipantsNow();
+  window.addEventListener('beforeunload', flushSaveParticipants);
+  // На мобильных beforeunload срабатывает не всегда — страхуемся при сворачивании.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && saveParticipantsTimer !== null) flushSaveParticipants();
   });
 
   function loadParticipants(){
@@ -1629,7 +1650,19 @@
     }
   }
 
-  function logLine(username, content, isMatch, twitchEmotes = null){
+  // Лента чата. Раньше каждое сообщение сразу добавлялось в DOM и тут же
+  // читалось el.feed.scrollHeight — это принудительный пересчёт вёрстки на
+  // КАЖДОЕ сообщение. Когда пишут сотни человек в секунду, страница почти
+  // целиком уходила на пересчёты. Теперь сообщения складываются в очередь и
+  // раз за кадр одним пакетом (DocumentFragment) вставляются в ленту, а
+  // прокрутка вниз и подрезка старых строк делаются один раз на пакет.
+  // Элементы строятся только для тех сообщений, что реально останутся в ленте
+  // (последние FEED_MAX_LINES) — остальные всё равно были бы сразу удалены.
+  const FEED_MAX_LINES = 300;
+  const feedQueue = [];
+  let feedFlushScheduled = false;
+
+  function buildFeedLine(username, content, isMatch, twitchEmotes){
     const line = document.createElement('div');
     line.className = 'feed-line' + (isMatch ? ' match' : '');
     const u = document.createElement('span');
@@ -1637,9 +1670,32 @@
     u.textContent = username + ': ';
     line.appendChild(u);
     appendMessageContent(line, content, twitchEmotes);
-    el.feed.appendChild(line);
+    return line;
+  }
+
+  function flushFeed(){
+    feedFlushScheduled = false;
+    if (!feedQueue.length) return;
+    const frag = document.createDocumentFragment();
+    const start = Math.max(0, feedQueue.length - FEED_MAX_LINES);
+    for (let i = start; i < feedQueue.length; i++){
+      const q = feedQueue[i];
+      frag.appendChild(buildFeedLine(q[0], q[1], q[2], q[3]));
+    }
+    feedQueue.length = 0;
+    el.feed.appendChild(frag);
+    while (el.feed.childNodes.length > FEED_MAX_LINES) el.feed.removeChild(el.feed.firstChild);
     el.feed.scrollTop = el.feed.scrollHeight;
-    while (el.feed.childNodes.length > 300) el.feed.removeChild(el.feed.firstChild);
+  }
+
+  function logLine(username, content, isMatch, twitchEmotes = null){
+    feedQueue.push([username, content, isMatch, twitchEmotes]);
+    // защита от разрастания очереди, если вкладка скрыта и кадры не идут
+    if (feedQueue.length > FEED_MAX_LINES * 2) feedQueue.splice(0, feedQueue.length - FEED_MAX_LINES);
+    if (feedFlushScheduled) return;
+    feedFlushScheduled = true;
+    if (document.hidden) setTimeout(flushFeed, 500);
+    else requestAnimationFrame(flushFeed);
   }
 
   /* ---------------- всплывающие смайлики из чата на весь экран ----------------
@@ -1838,7 +1894,7 @@
   function renderEntrants(){
     el.heroCount.textContent = entrants.size;
     el.drawBtn.disabled = !hasEligibleEntrant() || drawing;
-    syncParticles();
+    entrantsRev++;   // частицы обеих галактик досинхронизируются в ближайшем кадре
     saveParticipants();
   }
 
@@ -2464,35 +2520,35 @@
 
   let lastT = performance.now();
 
+  // Градиент полосы зависит только от размеров канвы — создаём один раз,
+  // а не на каждый кадр.
+  let bandCache = null;
   function drawMilkyWayBand(gx, gy){
     // мягкая полоса млечного пути на фоне
-    const band = ctx.createLinearGradient(0, gy - H * 0.35, 0, gy + H * 0.35);
-    band.addColorStop(0, 'rgba(160,180,255,0)');
-    band.addColorStop(0.5, 'rgba(170,190,255,0.06)');
-    band.addColorStop(1, 'rgba(160,180,255,0)');
+    const key = gy + '|' + H;
+    if (!bandCache || bandCache.key !== key){
+      const band = ctx.createLinearGradient(0, gy - H * 0.35, 0, gy + H * 0.35);
+      band.addColorStop(0, 'rgba(160,180,255,0)');
+      band.addColorStop(0.5, 'rgba(170,190,255,0.06)');
+      band.addColorStop(1, 'rgba(160,180,255,0)');
+      bandCache = { key, grad: band };
+    }
     ctx.save();
-    ctx.fillStyle = band;
+    ctx.fillStyle = bandCache.grad;
     ctx.fillRect(0, 0, W, H);
     ctx.restore();
   }
 
   function smoothStep(p){ return p * p * (3 - 2 * p); }
 
-  // Transform both the decorative stars and participant dots together.
+  // Декоративные звёзды и точки участников проходят одно и то же преобразование
+  // (сжатие к центру + поворот при слиянии). Раньше оно считалось отдельным
+  // вызовом flowPosition() на каждую точку: с новым объектом на выходе и
+  // повторным вычислением одних и тех же cos/sin(turn) — при 1000 участников
+  // это тысячи лишних аллокаций и тригонометрии на каждый кадр, из-за чего
+  // росла нагрузка на сборщик мусора. Теперь scale/cos/sin считаются один раз
+  // за кадр (см. frame), а точка преобразуется прямо в цикле, без объектов.
   // Nicknames are intentionally never drawn on this canvas — the roulette overlay shows names instead.
-  function flowPosition(x, y, progress){
-    let scale = 1, turn = 0;
-    if (animState === 'gather'){
-      const p = smoothStep(progress);
-      scale = 1 - p * .988;
-      turn = p * .7;
-    }
-    const dx = x - cx(), dy = (y - cy()) * 2;
-    return {
-      x:cx() + (dx * Math.cos(turn) - dy * Math.sin(turn)) * scale,
-      y:cy() + (dx * Math.sin(turn) + dy * Math.cos(turn)) * scale * .5,
-    };
-  }
 
   function finishAfterRoulette(){
     animState = 'done';
@@ -2501,7 +2557,23 @@
     renderEntrants();
   }
 
+  let lastDrawT = 0;
+  let syncedRev1 = -1;
+
   function frame(t){
+    // Досинхронизируем частицы, если состав участников изменился с прошлого кадра
+    if (syncedRev1 !== entrantsRev){ syncedRev1 = entrantsRev; syncParticles(); }
+
+    // При большом составе в покое (idle/done) ограничиваем частоту отрисовки:
+    // движение считается по реальному dt, поэтому скорость вращения не меняется,
+    // а нагрузка падает вдвое. Во время слияния и рулетки — полная частота.
+    if (animState === 'idle' || animState === 'done'){
+      const n = particles.size;
+      const minInterval = n > 700 ? 33 : (n > 350 ? 22 : 0);
+      if (minInterval && t - lastDrawT < minInterval - 2){ rafWhenVisible(frame); return; }
+    }
+    lastDrawT = t;
+
     const dt = Math.min(40, t - lastT);
     lastT = t;
     ctx.clearRect(0, 0, W, H);
@@ -2512,7 +2584,8 @@
       if (now - stateStart >= GATHER_MS + HOLD_MS){ beginReveal(now); progress = 1; }
     }
 
-    drawMilkyWayBand(cx(),cy());
+    const gcx = cx(), gcy = cy();
+    drawMilkyWayBand(gcx, gcy);
 
     if (animState === 'merged' || animState === 'roulette'){
       drawMergedStar(now, 1);
@@ -2529,34 +2602,52 @@
       ? starFade / (1 + compression*compression*Math.max(1,particles.size*.65))
       : 1;
 
+    // общие для всех точек параметры преобразования — один раз на кадр
+    const minWH = Math.min(W, H);
+    const nowSec = now / 1000;
+    let fScale = 1, fCos = 1, fSin = 0;
+    if (active){
+      const sp = smoothStep(progress);
+      fScale = 1 - sp * .988;
+      const turn = sp * .7;
+      fCos = Math.cos(turn);
+      fSin = Math.sin(turn);
+    }
+    const fScaleY = fScale * .5;
 
     bgStars.forEach(star => {
       star.angle += star.speed * dt / 1000;
-      const r = star.radiusRatio * Math.min(W,H) + Math.sin(now / 1000 * star.osc + star.phase) * 3;
-      const pos = flowPosition(cx() + Math.cos(star.angle)*r, cy() + Math.sin(star.angle)*r*.5, progress);
-      const depth = Math.sin(star.angle)*.5+.5;
+      const sinA = Math.sin(star.angle), cosA = Math.cos(star.angle);
+      const r = star.radiusRatio * minWH + Math.sin(nowSec * star.osc + star.phase) * 3;
+      const dx = cosA * r, dy = sinA * r;
+      const px = gcx + (dx * fCos - dy * fSin) * fScale;
+      const py = gcy + (dx * fSin + dy * fCos) * fScaleY;
+      const depth = sinA * .5 + .5;
       const alpha = star.alpha*(.5+depth*.5)*fade*starFade;
-      drawGlowDot(pos.x,pos.y,star.size*(.7+depth*.6),'#ffffff',alpha,5);
+      drawGlowDot(px,py,star.size*(.7+depth*.6),'#ffffff',alpha,5);
     });
 
     particles.forEach(p => {
       p.angle += p.speed * dt / 1000;
-      const r = p.radiusRatio * Math.min(W,H) + Math.sin(now / 1000 * p.osc + p.phase) * 4;
-      let pos = flowPosition(cx() + Math.cos(p.angle)*r,cy() + Math.sin(p.angle)*r*.5,progress);
-      const depth = Math.sin(p.angle)*.5+.5;
+      const sinA = Math.sin(p.angle), cosA = Math.cos(p.angle);
+      const r = p.radiusRatio * minWH + Math.sin(nowSec * p.osc + p.phase) * 4;
+      const dx = cosA * r, dy = sinA * r;
+      let px = gcx + (dx * fCos - dy * fSin) * fScale;
+      let py = gcy + (dx * fSin + dy * fCos) * fScaleY;
+      const depth = sinA * .5 + .5;
       const size = p.size*(.7+depth*.8);
       const alpha = p.alpha*(.5+depth*.5)*fade*participantFade;
       if (active) p.entering = false;
       if (p.entering){
         const ep = Math.min(1,(now-p.enterStart)/p.enterDur);
         const eased = easeOutCubic(ep);
-        pos.x = p.enterFrom.x + (pos.x-p.enterFrom.x)*eased;
-        pos.y = p.enterFrom.y + (pos.y-p.enterFrom.y)*eased;
+        px = p.enterFrom.x + (px-p.enterFrom.x)*eased;
+        py = p.enterFrom.y + (py-p.enterFrom.y)*eased;
         if (ep >= 1) p.entering = false;
       }
       // Небольшое цветное ядро и компактный мягкий ореол, как в галактике справа.
-      drawParticipantDot(ctx,pos.x,pos.y,Math.max(2.6,Math.min(3.4,size)),p.color,alpha);
-      p._x = pos.x; p._y = pos.y;
+      drawParticipantDot(ctx,px,py,Math.max(2.6,Math.min(3.4,size)),p.color,alpha);
+      p._x = px; p._y = py;
     });
     if (active) drawMergedStar(now, compression);
     rafWhenVisible(frame);
@@ -3436,17 +3527,48 @@
         phase: Math.random() * Math.PI * 2,
         color: participantColor(key),
         alpha: 0.88 + Math.random() * 0.12,
+        labelA: 0,   // текущая прозрачность ника (плавно 0..1, см. бюджет ников в frame2)
+        born: performance.now(),   // момент появления точки — для плавного проявления
       };
     }
 
+    // Пересобираем точки только когда состав участников реально менялся
+    // (раньше это были два полных прохода по всем участникам на КАЖДЫЙ кадр).
+    let syncedRev2 = -1;
     function syncNameDots2(){
+      if (syncedRev2 === entrantsRev) return;
+      syncedRev2 = entrantsRev;
       entrants.forEach((_, key) => {
         if (!nameDots2.has(key)) nameDots2.set(key, makeNameDot2(key));
       });
-      nameDots2.forEach((_, key) => {
-        if (!entrants.has(key)) nameDots2.delete(key);
-      });
+      if (nameDots2.size > entrants.size){
+        nameDots2.forEach((_, key) => {
+          if (!entrants.has(key)) nameDots2.delete(key);
+        });
+      }
     }
+
+    // Бюджет ников. Тысяча капсул с никами в небольшой панели — это и
+    // нечитаемая каша, и тысяча «путей + заливка + обводка + текст» на каждый
+    // кадр. Поэтому при большом составе одновременно подписаны не все:
+    // окно из LABEL_MAX2 ников «ползёт» по списку (за пару минут успевают
+    // показаться все), плюс всегда подписаны самые новые участники —
+    // чтобы человек сразу видел, что его ник попал в розыгрыш.
+    //
+    // Чтобы смена подписей не бросалась в глаза, всё сделано мягко:
+    //  • окно сдвигается непрерывно, по одному нику за раз (а не пачкой из
+    //    десятков сразу), так что на экране просто по одному «дрейфуют» имена;
+    //  • каждый ник проявляется и гаснет медленно, с плавным разгоном/торможением;
+    //  • новые точки тоже проявляются постепенно, а не вспыхивают на месте.
+    const LABEL_MAX2 = 90;          // максимум одновременно видимых ников
+    const LABEL_NEWEST2 = 20;       // последние вошедшие подписаны всегда
+    const LABEL_CYCLE_MS2 = 180000; // за сколько примерно окно обходит весь список
+    const LABEL_STEP_MIN2 = 90;     // не чаще одного нового ника за 90 мс
+    const LABEL_STEP_MAX2 = 500;    // и не реже одного за 500 мс
+    const LABEL_FADE_MS2 = 1500;    // полное проявление/угасание ника
+    const DOT_FADE_IN_MS2 = 1200;   // проявление новой точки участника
+    let lastT2 = 0;
+    let labelPos2 = 0;              // положение окна ников (дробное — сдвиг непрерывный)
 
     function cx2(){ return W2 * 0.62; }   // ядро галактики смещено чуть правее — эффект "продолжается за экран"
     function cy2(){ return H2 * 0.46; }
@@ -3468,7 +3590,17 @@
       if (lowPowerMode) return;
       if (!W2 || !H2){ rafWhenVisible(frame2); return; }
       syncNameDots2();
-      rotation2 += 0.000012 * 16;
+
+      // Фоновая галактика движется очень медленно (единицы пикселей в
+      // секунду), поэтому 30 кадров/с (20 при большом составе) неотличимы от 60,
+      // а нагрузка меньше вдвое-втрое. Скорости считаются по реальному dt —
+      // раньше каждый кадр «считался» за 16 мс, и на мониторах 120–144 Гц
+      // галактика вращалась в 2 раза быстрее.
+      const minInterval2 = nameDots2.size > 400 ? 50 : 33;
+      if (lastT2 && t - lastT2 < minInterval2 - 2){ rafWhenVisible(frame2); return; }
+      const dt2 = lastT2 ? Math.min(100, t - lastT2) : 33;
+      lastT2 = t;
+      rotation2 += 0.000012 * dt2;
 
       ctx2.clearRect(0, 0, W2, H2);
       // переустанавливаем на случай сброса состояния контекста после resize
@@ -3503,7 +3635,7 @@
       // просто пустые точки фона (декоративные звёзды) — небольшие, полупрозрачные,
       // без сильного размытия, чтобы выглядели как тонкие звёздочки, а не блики
       bgStars2.forEach((s) => {
-        s.angle += s.speed * (16 / 1000);
+        s.angle += s.speed * (dt2 / 1000);
         const r = s.radiusRatio * Math.min(W2,H2) + Math.sin(t / 1000 * s.osc + s.phase) * 3;
         const x = gx + Math.cos(s.angle) * r;
         const y = gy + Math.sin(s.angle) * r * 0.5;
@@ -3514,18 +3646,48 @@
       });
 
       // Участники — цветное ядро с нежным ореолом + ник в прозрачной капсуле.
+      const n2 = nameDots2.size;
+      const labelAll = n2 <= LABEL_MAX2;
+      let winStart = 0;
+      if (!labelAll){
+        const stepMs = Math.min(LABEL_STEP_MAX2, Math.max(LABEL_STEP_MIN2, LABEL_CYCLE_MS2 / n2));
+        labelPos2 += dt2 / stepMs;
+        winStart = Math.floor(labelPos2) % n2;
+      }
+      const labelStep = dt2 / LABEL_FADE_MS2;
+      let i2 = 0;
       nameDots2.forEach((s, key) => {
-        s.angle += s.speed * (16 / 1000);
+        s.angle += s.speed * (dt2 / 1000);
+        const sinA = Math.sin(s.angle);
         const r = s.radiusRatio * Math.min(W2,H2) + Math.sin(t / 1000 * s.osc + s.phase) * 4;
         const x = gx + Math.cos(s.angle) * r;
-        const y = gy + Math.sin(s.angle) * r * 0.5;
-        const depth = (Math.sin(s.angle) * 0.5 + 0.5);
+        const y = gy + sinA * r * 0.5;
+        const depth = (sinA * 0.5 + 0.5);
         const size = s.size * (0.7 + depth * 0.8);
-        const alpha = s.alpha * (0.75 + depth * 0.25);
+        // новая точка проявляется постепенно (плавный разгон/торможение)
+        const age = (t - s.born) / DOT_FADE_IN_MS2;
+        const dotA = age >= 1 ? 1 : (age <= 0 ? 0 : age * age * (3 - 2 * age));
+        const alpha = s.alpha * (0.75 + depth * 0.25) * dotA;
         drawParticipantDot(ctx2,x,y,Math.max(2.6,Math.min(3.8,size)),s.color,alpha);
 
-        const label = entrants.get(key);
-        if (label) drawNamePill2(x, y - size - 8, label, Math.min(0.85, alpha + 0.2), s.color);
+        // подписан ли этот участник в текущий момент
+        let want = labelAll;
+        if (!labelAll){
+          const off = (i2 - winStart + n2) % n2;
+          want = off < LABEL_MAX2 || i2 >= n2 - LABEL_NEWEST2;
+        }
+        i2++;
+        // ник меняет прозрачность с постоянной скоростью, а на экране это
+        // сглаживается smoothstep-кривой — без резких «щелчков» в начале и конце
+        if (want){ if (s.labelA < 1) s.labelA = Math.min(1, s.labelA + labelStep); }
+        else if (s.labelA > 0){ s.labelA = Math.max(0, s.labelA - labelStep); }
+        if (s.labelA > 0.01 && dotA > 0.01){
+          const label = entrants.get(key);
+          if (label){
+            const k = s.labelA * s.labelA * (3 - 2 * s.labelA);
+            drawNamePill2(x, y - size - 8, label, Math.min(0.85, alpha + 0.2 * dotA) * k, s.color);
+          }
+        }
       });
 
       rafWhenVisible(frame2);
@@ -3607,37 +3769,90 @@
       return w;
     }
 
-    // ник в маленькой прозрачной капсуле (скруглённая рамочка), чисто декоративно.
-    // shadowBlur на тексте убран — при сотнях участников это дорого каждый кадр;
-    // читаемость держится на плашке-подложке, а не на размытой тени.
-    // font/textAlign/textBaseline выставляются на каждый кадр (см. frame2) —
-    // resize канвы (смена canvas.width/height) сбрасывает состояние контекста,
-    // и если не переустановить это здесь, текст сползает от центра точки.
-    function drawNamePill2(x, y, text, alpha, accent){
+    // Капсула с ником целиком (подложка + рамка + текст) рисуется ОДИН раз на
+    // офскрин-канву и дальше выводится обычным drawImage. Раньше на каждый
+    // кадр для каждой подписи заново строился путь из 4 дуг, делались fill,
+    // stroke и fillText — самая дорогая часть кадра при сотнях участников.
+    // Кэш ограничен (LRU): при 1000 участниках и окне из ~100 видимых ников
+    // в памяти держится не больше PILL_CACHE_MAX2 маленьких спрайтов.
+    const PILL_CACHE_MAX2 = 320;
+    const pillSpriteCache2 = new Map();   // "цвет|ник" -> {cv, w, h, dpr}
+    function getPillSprite2(text, accent){
+      const key = accent + '|' + text;
+      let sp = pillSpriteCache2.get(key);
+      if (sp && sp.dpr === DPR2){
+        pillSpriteCache2.delete(key);      // «освежаем» запись (LRU)
+        pillSpriteCache2.set(key, sp);
+        return sp;
+      }
       const padX = 7, padY = 4;
-      const textW = pillWidthFor2(text);
+      // целая ширина капсулы — чтобы спрайт можно было класть на пиксельную
+      // сетку без масштабирования (иначе буквы «мылятся»)
+      const textW = Math.ceil(pillWidthFor2(text));
       const w = textW + padX * 2, h = 16 + padY;
-      const rx = x - w / 2, ry = y - h - 4;
-      const radius = h / 2;
+      const m = 1;                          // запас под рамку по краям
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.ceil((w + m * 2) * DPR2));
+      cv.height = Math.max(1, Math.ceil((h + m * 2) * DPR2));
+      const c = cv.getContext('2d');
+      c.scale(DPR2, DPR2);
+      c.font = '10px "IBM Plex Mono", monospace';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      const rx = m, ry = m, radius = h / 2;
+      c.beginPath();
+      c.moveTo(rx + radius, ry);
+      c.arcTo(rx + w, ry, rx + w, ry + h, radius);
+      c.arcTo(rx + w, ry + h, rx, ry + h, radius);
+      c.arcTo(rx, ry + h, rx, ry, radius);
+      c.arcTo(rx, ry, rx + w, ry, radius);
+      c.closePath();
+      // доли прозрачности те же, что раньше рисовались поверх общей alpha
+      c.globalAlpha = 0.55;
+      c.fillStyle = 'rgba(10,12,18,0.35)';
+      c.fill();
+      c.globalAlpha = 0.4;
+      c.strokeStyle = accent;
+      c.lineWidth = 1;
+      c.stroke();
+      c.globalAlpha = 1;
+      c.fillStyle = '#eef1f6';
+      // центр текста привязываем к сетке физических пикселей канвы —
+      // дробное положение даёт размытые штрихи букв
+      c.fillText(text,
+        Math.round((rx + w / 2) * DPR2) / DPR2,
+        Math.round((ry + h / 2 + 1) * DPR2) / DPR2);
+      sp = { cv, w: w + m * 2, h: h + m * 2, dpr: DPR2 };
+      pillSpriteCache2.set(key, sp);
+      if (pillSpriteCache2.size > PILL_CACHE_MAX2){
+        pillSpriteCache2.delete(pillSpriteCache2.keys().next().value);
+      }
+      return sp;
+    }
 
-      ctx2.globalAlpha = alpha * 0.55;
-      ctx2.fillStyle = 'rgba(10,12,18,0.35)';
-      ctx2.strokeStyle = accent;
-      ctx2.lineWidth = 1;
-      ctx2.beginPath();
-      ctx2.moveTo(rx + radius, ry);
-      ctx2.arcTo(rx + w, ry, rx + w, ry + h, radius);
-      ctx2.arcTo(rx + w, ry + h, rx, ry + h, radius);
-      ctx2.arcTo(rx, ry + h, rx, ry, radius);
-      ctx2.arcTo(rx, ry, rx + w, ry, radius);
-      ctx2.closePath();
-      ctx2.fill();
-      ctx2.globalAlpha = alpha * 0.4;
-      ctx2.stroke();
+    // ник в маленькой прозрачной капсуле (скруглённая рамочка), чисто декоративно.
+    function drawNamePill2(x, y, text, alpha, accent){
+      const sp = getPillSprite2(text, accent);
+      // положение то же, что и раньше: капсула стоит над точкой (y - h - 4)
+      const h = sp.h - 2;
+      // Чтобы буквы оставались чёткими, спрайт выводится строго 1:1 (размер —
+      // ровно в физических пикселях канвы) и с координатами, кратными
+      // физическому пикселю. Дробное смещение или масштаб заставляют браузер
+      // интерполировать картинку, и текст получается размытым.
+      const k = DPR2;
+      const dx = Math.round((x - sp.w / 2) * k) / k;
+      const dy = Math.round((y - h - 4 - 1) * k) / k;
+      ctx2.globalAlpha = Math.max(0, Math.min(1, alpha));
+      ctx2.imageSmoothingEnabled = false;
+      ctx2.drawImage(sp.cv, dx, dy, sp.cv.width / k, sp.cv.height / k);
+      ctx2.imageSmoothingEnabled = true;
+      ctx2.globalAlpha = 1;
+    }
 
-      ctx2.globalAlpha = alpha;
-      ctx2.fillStyle = '#eef1f6';
-      ctx2.fillText(text, rx + w / 2, ry + h / 2 + 1);
+    // Когда веб-шрифт догрузился, ширины и спрайты, снятые запасным шрифтом,
+    // пересчитываем заново.
+    if (document.fonts && document.fonts.ready){
+      document.fonts.ready.then(() => { pillWidthCache2.clear(); pillSpriteCache2.clear(); });
     }
 
     resizeCanvas2();
