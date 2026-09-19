@@ -1417,12 +1417,6 @@
   }
   loadParticipants();
 
-  // Максимум уникальных участников за один розыгрыш. Защита от неограниченного
-  // роста entrants/particles при огромном флешмобе в чате — без лимита каждый
-  // новый ник добавлял бы ещё одну точку в галактику навсегда, и на очень
-  // больших числах (десятки тысяч) это начало бы просаживать FPS анимации.
-  const MAX_ENTRANTS = 5000;
-
   /* ---------------- автопереподключение к чату ----------------
      Раньше при обрыве соединения (сеть моргнула, Pusher/Twitch разорвали
      сокет) виджет просто показывал статус "отключено" и молча переставал
@@ -1901,19 +1895,13 @@
       if (entrants.has(key)){
         entrantMessages.set(key, content);
         saveParticipants();
-      } else if (entrants.size < MAX_ENTRANTS){
+      } else {
         entrantMessages.set(key, content);
         entrants.set(key, username);
         renderEntrants();
-      } else if (!entrantsCapWarned){
-        // Лимит участников достигнут — защита от неограниченного роста
-        // entrants/particles при огромном флешмобе в чате (см. MAX_ENTRANTS).
-        entrantsCapWarned = true;
-        logLine('система', 'достигнут лимит участников (' + MAX_ENTRANTS + '), новые ники больше не добавляются в этот розыгрыш', false);
       }
     }
   }
-  let entrantsCapWarned = false;
 
   /* ---------------- connection ---------------- */
 
@@ -2334,7 +2322,6 @@
     entrants.clear();
     entrantMessages.clear();
     excluded.clear();
-    entrantsCapWarned = false;
     hideWinner();
     renderEntrants();
   });
@@ -2855,14 +2842,44 @@
     return names;
   }
 
+  // Лента для рулетки: случайные ники из пула, в конце — победитель.
+  // Окно рулетки показывает 3 строки подряд, поэтому один и тот же ник не
+  // ставим ближе чем через 2 строки (при 3+ участниках): в окне не бывает
+  // повторов. Если участников всего двое — просто чередуем, чтобы одинаковые
+  // ники не стояли вплотную. Если участник один — повторов не избежать.
+  // Ленту собираем от победителя к началу: так и победитель, и строка под ним
+  // гарантированно не совпадают со своими соседями.
   function buildRouletteReel(targetName, totalRows = 26){
     const pool = rouletteNamePool();
-    const rows = [];
-    for (let i = 0; i < totalRows - 1; i++){
-      rows.push(pool[Math.floor(Math.random() * pool.length)]);
+    const noRepeat = Math.max(0, Math.min(2, pool.length - 1)); // сколько соседних строк не повторяем
+    const lc = (v) => String(v).toLowerCase();
+
+    function pickExcluding(banned){
+      const bannedSet = new Set(banned.filter(v => v != null).map(lc));
+      // быстрый путь — случайные попытки (пул может быть огромным)
+      for (let t = 0; t < 30; t++){
+        const cand = pool[Math.floor(Math.random() * pool.length)];
+        if (!bannedSet.has(lc(cand))) return cand;
+      }
+      // запасной путь — честный перебор с случайного места
+      const start = Math.floor(Math.random() * pool.length);
+      for (let k = 0; k < pool.length; k++){
+        const cand = pool[(start + k) % pool.length];
+        if (!bannedSet.has(lc(cand))) return cand;
+      }
+      return pool[start];
     }
-    rows.push(targetName); // предпоследняя строка — победитель, останавливаемся точно на ней
-    rows.push(pool[Math.floor(Math.random() * pool.length)]); // ещё одна строка снизу — будто не докрутило
+
+    const last = totalRows;                 // индекс строки под победителем
+    const win = totalRows - 1;              // индекс победителя (в центре окна на остановке)
+    const rows = new Array(totalRows + 1);
+    rows[win] = targetName;
+    rows[last] = noRepeat ? pickExcluding([targetName]) : pool[0];
+    for (let i = win - 1; i >= 0; i--){
+      const banned = [];
+      for (let d = 1; d <= noRepeat; d++) banned.push(rows[i + d]);
+      rows[i] = noRepeat ? pickExcluding(banned) : pool[0];
+    }
     return rows;
   }
 
