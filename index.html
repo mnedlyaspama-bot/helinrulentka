@@ -26,6 +26,7 @@
     --gold:#ffd166;
     --danger:#ff6b6b;
     --violet:#8ab4ff;
+    --pw:clamp(220px,20vw,300px);   /* ширина правого окна с участниками */
     --kick-color:#53fc18;
     --twitch-color:#9146ff;
     --mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
@@ -513,6 +514,7 @@
     margin-bottom:14px;
   }
   .history-cell h2{ font-size:13px; margin:0; }
+  .history-cell h2 .h-count{ color:var(--gold); }
   button.ghost.small{
     padding:5px 10px;
     font-size:11px;
@@ -899,7 +901,7 @@
   /* ---------------- вступительный экран (ввод канала Kick) ---------------- */
   body.app-hidden{ overflow:hidden; }
   .wrap{
-    transition: opacity .8s cubic-bezier(.22,1,.36,1), transform .8s cubic-bezier(.22,1,.36,1), filter .8s cubic-bezier(.22,1,.36,1);
+    transition: opacity .8s cubic-bezier(.22,1,.36,1), transform .8s cubic-bezier(.22,1,.36,1), filter .8s cubic-bezier(.22,1,.36,1), padding .9s cubic-bezier(.22,1,.36,1);
   }
   body.app-hidden .wrap{
     opacity:0;
@@ -907,12 +909,127 @@
     filter:blur(10px);
     pointer-events:none;
   }
-  .decor-galaxy-panel{ transition:opacity 1s ease; }
+  .decor-galaxy-panel{ transition:opacity 1s ease, visibility 0s linear 0s; }
   body.app-hidden .decor-galaxy-panel{ opacity:0; }
   /* режим "слабое устройство" — декоративная фоновая галактика вообще не
      рисуется (см. lowPowerMode в скрипте), а сам её контейнер прячем,
      чтобы не оставалось пустого прозрачного слоя поверх макета. */
-  body.low-power-mode .decor-galaxy-panel{ display:none; }
+  /* Галактика не пропадает рывком, а плавно гаснет; после затухания
+     visibility:hidden убирает слой полностью. */
+  body.low-power-mode .decor-galaxy-panel{
+    opacity:0;
+    visibility:hidden;
+    transition:opacity 1s ease, visibility 0s linear 1s;
+  }
+
+  /* ---------------- окно участников (вместо фоновой галактики) ----------------
+     Появляется справа плавным fade + лёгким выездом, когда включён
+     чекбокс "убрать фоновую галактику". */
+  .participants-panel{
+    position:absolute;          /* внутри .mega — вплотную справа от основных окон */
+    top:0;
+    bottom:0;
+    left:calc(100% + 14px);
+    width:var(--pw);
+    background:var(--cell-solid);
+    border:1px solid var(--line-soft);
+    border-radius:var(--r-md);
+    padding:18px;
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    z-index:2;
+    opacity:0;
+    visibility:hidden;
+    transform:translateX(28px);
+    pointer-events:none;
+    transition:opacity .7s ease, transform .9s cubic-bezier(.22,1,.36,1), visibility 0s linear .9s;
+  }
+  body.low-power-mode:not(.app-hidden) .participants-panel{
+    opacity:1;
+    visibility:visible;
+    transform:none;
+    pointer-events:auto;
+    transition:opacity .9s ease .35s, transform .9s cubic-bezier(.22,1,.36,1) .35s, visibility 0s linear 0s;
+  }
+  .pp-head{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:14px;
+  }
+  .participants-panel h2{ font-size:13px; margin:0; }
+  .pp-count{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--green);
+  }
+  .pp-list{
+    flex:1;
+    min-height:0;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    overscroll-behavior:contain;
+  }
+  .pp-list::-webkit-scrollbar{width:6px;}
+  .pp-list::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
+  .pp-empty{
+    color:var(--muted);
+    font-family:var(--mono);
+    font-size:12px;
+    padding:6px 0;
+  }
+  .pp-item{
+    flex:none;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    background:var(--panel-solid);
+    border:1px solid var(--line-soft);
+    border-radius:10px;
+    padding:7px 10px;
+    font-size:13px;
+    color:var(--text);
+    overflow-wrap:anywhere;
+  }
+  .pp-item::before{
+    content:"";
+    width:6px;
+    height:6px;
+    border-radius:50%;
+    background:var(--green);
+    flex:none;
+  }
+  .pp-item.won{ color:var(--gold); }
+  .pp-item.won::before{ background:var(--gold); }
+
+  /* Пока окно справа открыто, вся композиция (основные окна + окно участников)
+     центрируется на странице как единое целое: сетку сдвигаем влево на половину
+     ширины панели вместе с отступом, а если места мало — сетка сужается.
+     Заголовок с числом участников остаётся строго по центру экрана. */
+  .mega{ transition:max-width .9s cubic-bezier(.22,1,.36,1), transform .9s cubic-bezier(.22,1,.36,1); }
+  @media(min-width:1101px){
+    body.low-power-mode:not(.app-hidden) .mega{
+      max-width:min(1100px, calc(100% - var(--pw) - 14px));
+      transform:translateX(calc((var(--pw) + 14px) / -2));
+    }
+  }
+  /* На узких экранах окно не помещается сбоку — ставим его снизу справа. */
+  @media(max-width:1100px){
+    .participants-panel{
+      position:fixed;
+      top:auto;
+      left:auto;
+      bottom:12px;
+      right:12px;
+      width:min(300px, calc(100vw - 24px));
+      height:min(46vh, 380px);
+    }
+    body.low-power-mode:not(.app-hidden) .wrap{ padding-bottom:calc(min(46vh, 380px) + 40px); }
+  }
 
   .splash-screen{
     position:fixed;
@@ -1147,6 +1264,13 @@
   </div>
 
   <div class="mega">
+    <aside class="participants-panel" id="participantsPanel">
+      <div class="pp-head">
+        <h2>участники</h2>
+        <span class="pp-count" id="ppCount">0</span>
+      </div>
+      <div class="pp-list" id="ppList"><div class="pp-empty">пока никого нет</div></div>
+    </aside>
     <div class="mega-grid">
 
       <div class="cell settings-cell">
@@ -1211,7 +1335,7 @@
 
       <div class="cell history-cell">
         <div class="history-head">
-          <h2>история победителей</h2>
+          <h2>история победителей <span class="h-count" id="historyCount">(0)</span></h2>
           <button type="button" class="ghost small" id="clearHistoryBtn">очистить</button>
         </div>
         <div class="history-list-wrap">
@@ -1321,6 +1445,9 @@
     winnerTag: document.getElementById('winnerTag'),
     winnersList: document.getElementById('winnersList'),
     historyList: document.getElementById('historyList'),
+    historyCount: document.getElementById('historyCount'),
+    ppList: document.getElementById('ppList'),
+    ppCount: document.getElementById('ppCount'),
     clearHistoryBtn: document.getElementById('clearHistoryBtn'),
     rouletteOverlay: document.getElementById('rouletteOverlay'),
     rouletteTag: document.getElementById('rouletteTag'),
@@ -1360,6 +1487,9 @@
     // Выключили режим — декоративная галактика сама себя остановила на
     // следующем кадре (см. frame2), её rAF-цикл нужно перезапустить вручную.
     if (!lowPowerMode && resumeDecorGalaxy) resumeDecorGalaxy();
+    // Включили режим — окно участников появляется вместо галактики,
+    // список нужно собрать сразу (пока режим был выключен, он не обновлялся).
+    if (lowPowerMode) renderParticipants();
   });
 
   let ws = null;
@@ -1496,11 +1626,27 @@
     } catch(e){ return []; }
   }
 
+  // В списке хранится максимум 30 последних записей, а общий счётчик
+  // победителей растёт без лимита и сбрасывается только кнопкой «очистить».
+  const HISTORY_MAX = 30;
+  const HISTORY_TOTAL_KEY = 'kickRaffleWinnerTotal_v1';
+
   function saveHistory(){
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(winnerHistory.slice(0, 200))); } catch(e){}
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(winnerHistory.slice(0, HISTORY_MAX))); } catch(e){}
   }
 
-  let winnerHistory = loadHistory();
+  function saveHistoryTotal(){
+    try { localStorage.setItem(HISTORY_TOTAL_KEY, String(winnerTotal)); } catch(e){}
+  }
+
+  let winnerHistory = loadHistory().slice(0, HISTORY_MAX);
+  let winnerTotal = (() => {
+    try {
+      const n = parseInt(localStorage.getItem(HISTORY_TOTAL_KEY), 10);
+      if (Number.isFinite(n) && n >= 0) return Math.max(n, winnerHistory.length);
+    } catch(e){}
+    return winnerHistory.length;   // старые данные без счётчика
+  })();
 
   function addHistoryEntries(keys){
     const timeStr = new Date().toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
@@ -1511,12 +1657,15 @@
         time: timeStr,
       });
     });
-    winnerHistory = winnerHistory.slice(0, 200);
+    winnerTotal += keys.length;
+    winnerHistory = winnerHistory.slice(0, HISTORY_MAX);
     saveHistory();
+    saveHistoryTotal();
     renderHistory();
   }
 
   function renderHistory(){
+    el.historyCount.textContent = '(' + winnerTotal + ')';
     el.historyList.innerHTML = '';
     if (!winnerHistory.length){
       const empty = document.createElement('div');
@@ -1554,7 +1703,9 @@
 
   el.clearHistoryBtn.addEventListener('click', () => {
     winnerHistory = [];
+    winnerTotal = 0;
     saveHistory();
+    saveHistoryTotal();
     renderHistory();
   });
 
@@ -1891,8 +2042,45 @@
     }
   }
 
+  /* ---------------- окно участников (показывается вместо галактики) ---------------- */
+  let ppTimer = null;
+
+  function renderParticipants(){
+    clearTimeout(ppTimer);
+    ppTimer = null;
+    el.ppCount.textContent = entrants.size;
+    el.ppList.innerHTML = '';
+    if (!entrants.size){
+      const empty = document.createElement('div');
+      empty.className = 'pp-empty';
+      empty.textContent = 'пока никого нет';
+      el.ppList.appendChild(empty);
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    const items = Array.from(entrants);
+    // новые участники — сверху
+    for (let i = items.length - 1; i >= 0; i--){
+      const [key, name] = items[i];
+      const row = document.createElement('div');
+      row.className = 'pp-item' + (excluded.has(key) ? ' won' : '');
+      row.textContent = name;
+      frag.appendChild(row);
+    }
+    el.ppList.appendChild(frag);
+  }
+
+  // Во время флешмоба в чате renderEntrants() зовётся на каждое сообщение —
+  // пересобираем список не чаще раза в 250 мс и только пока окно видно.
+  function scheduleParticipants(){
+    el.ppCount.textContent = entrants.size;
+    if (!lowPowerMode || ppTimer !== null) return;
+    ppTimer = setTimeout(renderParticipants, 250);
+  }
+
   function renderEntrants(){
     el.heroCount.textContent = entrants.size;
+    scheduleParticipants();
     el.drawBtn.disabled = !hasEligibleEntrant() || drawing;
     entrantsRev++;   // частицы обеих галактик досинхронизируются в ближайшем кадре
     saveParticipants();
