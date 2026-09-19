@@ -1707,6 +1707,10 @@
     saveHistory();
     saveHistoryTotal();
     renderHistory();
+    // Жёлтые ники победителей в окне участников тоже сбрасываются —
+    // заодно они снова могут участвовать в розыгрыше.
+    excluded.clear();
+    renderEntrants();
   });
 
   /* ---------------- status / feed / entrants UI ---------------- */
