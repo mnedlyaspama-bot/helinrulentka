@@ -1929,20 +1929,25 @@
     feedQueue.length = 0;
     const wasPinned = feedPinned;
     el.feed.appendChild(frag);
-    // если пользователь читает историю (не внизу), при обрезке старых строк
-    // компенсируем удалённую высоту, чтобы видимый текст не прыгал под курсором
-    let removedHeight = 0;
-    while (el.feed.childNodes.length > FEED_MAX_LINES){
-      const first = el.feed.firstChild;
-      if (!wasPinned) removedHeight += first.offsetHeight;
-      el.feed.removeChild(first);
-    }
+
     if (wasPinned){
+      while (el.feed.childNodes.length > FEED_MAX_LINES) el.feed.removeChild(el.feed.firstChild);
       el.feed.scrollTop = el.feed.scrollHeight;
-    } else {
-      if (removedHeight) el.feed.scrollTop -= removedHeight;
-      setFeedPaused(true);
+      return;
     }
+
+    // Лента на паузе (юзер читает историю). Раньше высоту удаляемых строк
+    // мерили по одной (first.offsetHeight на КАЖДУЮ удаляемую строку) — это
+    // N принудительных reflow за один флеш. Теперь меряем общую высоту всего
+    // двумя замерами scrollHeight (до и после обрезки пачки целиком) и вовсе
+    // не трогаем layout, если обрезать нечего.
+    if (el.feed.childNodes.length > FEED_MAX_LINES){
+      const heightBefore = el.feed.scrollHeight;
+      while (el.feed.childNodes.length > FEED_MAX_LINES) el.feed.removeChild(el.feed.firstChild);
+      const removed = heightBefore - el.feed.scrollHeight;
+      if (removed > 0) el.feed.scrollTop -= removed;
+    }
+    setFeedPaused(true);
   }
 
   function logLine(username, content, isMatch, twitchEmotes = null){
