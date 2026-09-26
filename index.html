@@ -665,6 +665,60 @@
   .feed::-webkit-scrollbar{width:7px;}
   .feed::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
 
+  /* обёртка нужна только для того, чтобы плашка "чат приостановлен"
+     позиционировалась поверх .feed, а не влияла на его высоту/скролл.
+     flex-direction:column обязателен: .feed внутри рассчитан на колоночный
+     родитель (flex:1 + height:0 работают только по вертикальной главной оси) */
+  .feed-wrap{
+    position:relative;
+    flex:1 1 0;
+    height:0;
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .feed-wrap .feed{ flex:1 1 0; height:0; min-height:0; }
+  .feed-resume-btn{
+    position:absolute;
+    left:50%;
+    bottom:10px;
+    transform:translateX(-50%);
+    display:none;
+    align-items:center;
+    gap:7px;
+    font-family:var(--mono);
+    font-size:11.5px;
+    color:var(--text);
+    background:rgba(10,12,18,0.9);
+    border:1px solid var(--line);
+    padding:7px 13px;
+    border-radius:999px;
+    cursor:pointer;
+    backdrop-filter:blur(6px);
+    -webkit-backdrop-filter:blur(6px);
+    box-shadow:0 6px 18px rgba(0,0,0,0.35);
+    z-index:2;
+    white-space:nowrap;
+  }
+  .feed-resume-btn.show{ display:flex; }
+  /* без transition/transform-переопределений: общее правило "button:active{
+     transform:scale(.98)}" перебивало нашу центровку translateX(-50%),
+     из-за чего плашку при клике визуально "уносило" вправо. Здесь transform
+     фиксирован жёстко на всех состояниях, анимации нет вообще. */
+  .feed-resume-btn,
+  .feed-resume-btn:hover,
+  .feed-resume-btn:active{
+    transform:translateX(-50%);
+    transition:none;
+  }
+  .feed-resume-btn:hover{ border-color:rgba(255,255,255,0.3); color:#fff; }
+  .feed-resume-btn .frb-dot{
+    width:7px; height:7px; border-radius:50%;
+    background:var(--gold);
+    flex:none;
+  }
+
   .winner-reactions{ display:none; }
   .winner-reactions.show{
     display:block;
@@ -888,7 +942,8 @@
   .history-head{ flex-wrap:wrap; }
   /* Bound the chat panel itself, independent of grid row/content height. */
   .cell-feed{ height:380px; min-height:0; max-height:380px; align-self:start; overflow:hidden; }
-  .cell-feed > .feed{ flex:1 1 0; height:0; min-height:0; max-height:none; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
+  .cell-feed .feed-wrap{ flex:1 1 0; height:0; min-height:0; max-height:none; }
+  .cell-feed .feed{ flex:1 1 0; height:0; min-height:0; max-height:none; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
   /* Scroll only after reserving space for the complete text glow. */
   .winner-overlay{ top:50%; max-height:100%; padding:12px 8px; transform:translate(-50%,-50%) scale(.96); }
   .winner-overlay.show{ transform:translate(-50%,-50%) scale(1); }
@@ -1348,7 +1403,12 @@
 
       <div class="cell cell-feed">
         <h2>лента чата</h2>
-        <div class="feed" id="feed"></div>
+        <div class="feed-wrap">
+          <div class="feed" id="feed"></div>
+          <button type="button" class="feed-resume-btn" id="feedResumeBtn">
+            <span class="frb-dot"></span> Чат приостановлен из-за прокрутки
+          </button>
+        </div>
       </div>
 
     </div>
@@ -1440,6 +1500,7 @@
     heroCount: document.getElementById('heroCount'),
     resetBtn: document.getElementById('resetBtn'),
     feed: document.getElementById('feed'),
+    feedResumeBtn: document.getElementById('feedResumeBtn'),
     drawBtn: document.getElementById('drawBtn'),
     winnerOverlay: document.getElementById('winnerOverlay'),
     winnerTag: document.getElementById('winnerTag'),
@@ -1817,6 +1878,34 @@
   const feedQueue = [];
   let feedFlushScheduled = false;
 
+  // Автоскролл ленты чата вниз должен работать, только пока пользователь и
+  // так смотрит на низ ленты. Если он прокрутил вверх почитать историю —
+  // новые сообщения не должны выдёргивать его обратно вниз. Вместо этого
+  // показываем плашку "чат приостановлен" с кнопкой возврата к живой ленте.
+  const FEED_BOTTOM_THRESHOLD = 24; // px — небольшой запас, чтобы не дёргалось на границе
+  let feedPinned = true;
+
+  function isFeedAtBottom(){
+    return el.feed.scrollHeight - el.feed.scrollTop - el.feed.clientHeight <= FEED_BOTTOM_THRESHOLD;
+  }
+
+  function setFeedPaused(paused){
+    if (el.feedResumeBtn) el.feedResumeBtn.classList.toggle('show', paused);
+  }
+
+  el.feed.addEventListener('scroll', () => {
+    feedPinned = isFeedAtBottom();
+    if (feedPinned) setFeedPaused(false);
+  }, { passive:true });
+
+  if (el.feedResumeBtn){
+    el.feedResumeBtn.addEventListener('click', () => {
+      feedPinned = true;
+      setFeedPaused(false);
+      el.feed.scrollTop = el.feed.scrollHeight;
+    });
+  }
+
   function buildFeedLine(username, content, isMatch, twitchEmotes){
     const line = document.createElement('div');
     line.className = 'feed-line' + (isMatch ? ' match' : '');
@@ -1838,9 +1927,22 @@
       frag.appendChild(buildFeedLine(q[0], q[1], q[2], q[3]));
     }
     feedQueue.length = 0;
+    const wasPinned = feedPinned;
     el.feed.appendChild(frag);
-    while (el.feed.childNodes.length > FEED_MAX_LINES) el.feed.removeChild(el.feed.firstChild);
-    el.feed.scrollTop = el.feed.scrollHeight;
+    // если пользователь читает историю (не внизу), при обрезке старых строк
+    // компенсируем удалённую высоту, чтобы видимый текст не прыгал под курсором
+    let removedHeight = 0;
+    while (el.feed.childNodes.length > FEED_MAX_LINES){
+      const first = el.feed.firstChild;
+      if (!wasPinned) removedHeight += first.offsetHeight;
+      el.feed.removeChild(first);
+    }
+    if (wasPinned){
+      el.feed.scrollTop = el.feed.scrollHeight;
+    } else {
+      if (removedHeight) el.feed.scrollTop -= removedHeight;
+      setFeedPaused(true);
+    }
   }
 
   function logLine(username, content, isMatch, twitchEmotes = null){
@@ -3483,7 +3585,7 @@
 
     const MINI_ROULETTE_ROW_H = 32;
     const MINI_ROULETTE_ROWS = 16;
-    const MINI_ROULETTE_MS = 900;
+    const MINI_ROULETTE_MS = 1200;
 
     // Применяет уже выбранного нового победителя вместо старого во всех
     // местах, где отображается его имя (вкладка, окно слов победителя,
