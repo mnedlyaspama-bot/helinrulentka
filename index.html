@@ -182,6 +182,67 @@
     gap:14px;
     align-items:stretch; 
   }
+  /* викторина — колонка слева от окон розыгрыша: вопрос сверху, топ сессии снизу.
+     Чисто интерактив, ни на что не влияет */
+  .quiz-col{
+    position:absolute; top:0; right:calc(100% + 14px);
+    width:min(260px, calc((100vw - 100%)/2 - 24px));
+    display:flex; flex-direction:column; gap:14px; z-index:2; color:var(--text);
+    transition:opacity .4s ease, transform .4s ease, visibility 0s;
+  }
+  .quiz-card{ min-width:0; background:var(--cell-solid); border:1px solid var(--line-soft); border-radius:var(--r-md); padding:14px; }
+  .quiz-board{ flex:none; min-height:140px; max-height:300px; overflow:hidden; display:flex; flex-direction:column; }
+  .quiz-board #quizList{ flex:1; min-height:0; overflow-y:auto; scrollbar-width:thin; }
+  .quiz-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .quiz-head h2{ font-size:13px; margin:0; }
+  .quiz-head button{ font:inherit; font-size:11px; color:var(--muted); background:none; border:1px solid var(--line); border-radius:999px; padding:2px 9px; cursor:pointer; margin-left:4px; }
+  .quiz-col.off{ opacity:0; visibility:hidden; transform:translateX(-14px); pointer-events:none;
+    transition:opacity .4s ease, transform .4s ease, visibility 0s linear .4s; }
+  .topbar-right{ position:relative; }
+  .quiz-settings{ position:absolute; top:calc(100% + 8px); right:0; display:flex; flex-direction:column; align-items:flex-end; gap:8px; z-index:5; }
+  .quiz-settings-btn{ cursor:pointer; white-space:nowrap; }
+  .quiz-settings-btn:hover{ color:var(--text); }
+  .quiz-settings-pop{ width:230px; background:var(--cell-solid); border:1px solid var(--line-soft); border-radius:var(--r-md); padding:14px;
+    opacity:0; visibility:hidden; transform:translateY(-6px);
+    transition:opacity .25s ease, transform .25s ease, visibility 0s linear .25s; }
+  .quiz-settings-pop.open{ opacity:1; visibility:visible; transform:none; transition:opacity .25s ease, transform .25s ease; }
+  .quiz-settings-pop .row-check{ margin-bottom:0; }
+  .qs-field{ margin:12px 0 0; font-size:12px; }
+  .qs-field select{ width:100%; margin-top:6px; background:var(--panel-solid); border:1px solid var(--line); color:var(--text);
+    font-family:var(--mono); font-size:12px; padding:8px 10px; border-radius:var(--r-sm); outline:none; }
+  .qs-field select:focus{ border-color:var(--green); box-shadow:0 0 0 3px var(--green-soft); }
+  .quiz-q{ font-size:14px; font-weight:600; line-height:1.35; margin:10px 0; overflow-wrap:anywhere; }
+  .quiz-opt{ overflow-wrap:anywhere; font-size:13px; padding:6px 10px; margin-top:5px; border:1px solid var(--line-soft); border-radius:8px; transition:opacity .3s, border-color .3s, background .3s; }
+  .quiz-opt b{ color:var(--gold); margin-right:6px; font-family:var(--mono); }
+  .quiz-opt.ok{ border-color:var(--green); background:var(--green-soft); }
+  .quiz-opt.dim{ opacity:.35; }
+  .quiz-bar{ height:3px; background:var(--line-soft); border-radius:3px; margin:12px 0 8px; overflow:hidden; }
+  .quiz-bar i{ display:block; height:100%; background:var(--green); transform-origin:left; will-change:transform; }
+  .quiz-meta{ display:flex; justify-content:space-between; font-size:11px; color:var(--muted); }
+  .quiz-row{ display:flex; justify-content:space-between; gap:8px; font-size:13px; padding:3px 0; }
+  .quiz-row span:first-child{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .quiz-row span:last-child{ color:var(--gold); font-family:var(--mono); flex:none; }
+  .quiz-body.idle .quiz-bar, .quiz-body.idle .quiz-meta{ display:none; }
+  .quiz-empty{ font-size:12px; color:var(--muted); margin-top:8px; }
+
+  /* Узкие экраны: боковой колонке места нет — викторина встаёт в поток над окнами
+     розыгрыша (вопрос слева, топ справа), а кнопка настроек — рядом с индикатором. */
+  @media (max-width:1560px){
+    .quiz-col{ position:static; inset:auto; width:100%; display:grid;
+      grid-template-columns:minmax(0,1.6fr) minmax(0,1fr); gap:12px; margin-bottom:14px; }
+    .quiz-col.off{ display:none; }
+    .topbar-right{ display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; }
+    .quiz-settings{ position:relative; top:auto; right:auto; display:block; }
+    .quiz-settings-pop{ position:absolute; top:calc(100% + 8px); right:0; z-index:20; }
+  }
+  @media (max-width:700px){
+    .quiz-col{ grid-template-columns:minmax(0,1fr); gap:10px; }
+    .quiz-board{ min-height:0; max-height:200px; }
+  }
+  @media (max-width:480px){
+    .topbar-right{ width:100%; justify-content:flex-start; }
+    .quiz-settings-pop{ left:0; right:auto; width:min(230px, calc(100vw - 48px)); }
+  }
   .cell-feed{ grid-area:feed; }
   .decor-galaxy-panel{
     position:fixed;
@@ -1318,7 +1379,20 @@
   <div class="topbar">
     <div class="brand"><span class="mark" id="brandMark">KICK</span> розыгрыш по слову в чате by <span class="author">coffee_mayzz</span> & <span class="author"> ugewaru</span></div>
 
-    <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">не подключено</span></div>
+    <div class="topbar-right">
+      <div class="status-pill"><span class="dot" id="statusDot"></span><span id="statusText">не подключено</span></div>
+      <div class="quiz-settings" id="quizSettings">
+        <button type="button" class="status-pill quiz-settings-btn" id="quizSettingsBtn" aria-expanded="false">настройки викторины ▾</button>
+        <div class="quiz-settings-pop" id="quizSettingsPop">
+          <div class="row-check">
+            <input type="checkbox" id="quizOff">
+            <label for="quizOff" style="margin:0;">выключить викторину</label>
+          </div>
+          <label class="qs-field">тема<select id="quizTheme"></select></label>
+          <label class="qs-field">сложность<select id="quizDiff"></select></label>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="hero">
@@ -1328,6 +1402,21 @@
   </div>
 
   <div class="mega">
+    <div class="quiz-col" id="quizPanel">
+      <div class="quiz-card">
+        <div class="quiz-head"><h2>викторина <span style="color:var(--muted);font-weight:400;">· Бета тест</span></h2></div>
+        <div class="quiz-body">
+          <div class="quiz-q" id="quizQ"></div>
+          <div id="quizOpts"></div>
+          <div class="quiz-bar"><i id="quizBar"></i></div>
+          <div class="quiz-meta"><span id="quizCnt">верно: 0</span><span id="quizAttr">by coffee_mayzz</span></div>
+        </div>
+      </div>
+      <div class="quiz-card quiz-board">
+        <div class="quiz-head"><h2>топ за сессию</h2><button type="button" id="quizReset">сброс</button></div>
+        <div id="quizList"></div>
+      </div>
+    </div>
     <aside class="participants-panel" id="participantsPanel">
       <div class="pp-head">
         <h2>участники</h2>
@@ -2241,6 +2330,7 @@
     if (!msg || typeof msg.content !== 'string') return;
     const username = msg.username || 'unknown';
     const content = msg.content;
+    quizHandle(username, content);
     const kw = normalize(el.keyword.value);
     let isMatch = false;
     if (kw){
@@ -4171,6 +4261,301 @@
     // вообще не стартует — нечего останавливать и незачем тратить кадр.
     if (!lowPowerMode) resumeDecorGalaxy();
   })();
+
+  /* ---------------- викторина (интерактив, ни на что не влияет) ----------------
+     Каждые 23 с новый вопрос из Open Trivia DB с автопереводом на русский
+     (без ограничений по количеству). Ответ — только цифра 1…4. Засчитываются только те,
+     кто уже участвует в розыгрыше (есть в entrants); один ответ на вопрос.
+     Первые 20 с — приём ответов, последние 3 с — показ правильного.
+     Пока вопросов нет (или не удалось получить) — пишем "Подбираем вопросы..."
+     и продолжаем пробовать в фоне. */
+  const QUIZ_MS = 23000, QUIZ_REVEAL_MS = 20000;   // 20 с на ответ + 3 с показ правильного
+  const quizEl = {
+    panel: document.getElementById('quizPanel'), q: document.getElementById('quizQ'),
+    opts: document.getElementById('quizOpts'), bar: document.getElementById('quizBar'),
+    list: document.getElementById('quizList'),
+    cnt: document.getElementById('quizCnt'),
+    attr: document.getElementById('quizAttr'), reset: document.getElementById('quizReset'),
+  };
+  let quizOn = true, quizCur = null, quizStart = 0, quizRevealed = false;
+  let quizAnswered = new Set(), quizCorrectN = 0;
+  const quizTotals = new Map(), quizNames = new Map();   // топ за сессию
+  let quizPool = [], quizLoading = false, quizToken = '', quizRetryAt = 0;
+  let quizGen = 0, quizSmall = false, quizTheme = '0', quizDiff = 'mix';   // настройки викторины
+  const QUIZ_THEMES = [['0','Любая'],['9','Общие знания'],['17','Наука и природа'],['22','География'],['23','История'],['27','Животные'],['15','Видеоигры'],['11','Кино'],['12','Музыка'],['21','Спорт'],['20','Мифология'],['31','Аниме и манга'],['32','Мультфильмы'],['18','Компьютеры'],['10','Книги'],['25','Искусство'],['28','Транспорт'],['14','Телевидение']];
+  const QUIZ_DIFFS = [['mix','Смешанная'],['easy','Лёгкая'],['medium','Средняя'],['hard','Сложная']];
+
+  function quizShuffle(a){
+    for (let i = a.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  /* ---- онлайн-вопросы: Open Trivia DB (английский) + автоперевод (неофициальный
+     endpoint Google Translate). Любая ошибка -> вопрос просто пропускается. ---- */
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  async function quizGetJson(url){
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('http ' + r.status);
+    return r.json();
+  }
+  // вопросы про буквы, рифмы, слова и т.п. при переводе теряют смысл — такие не берём
+  const QUIZ_SKIP = /\b(spell(?:ed|ing)?|letters?|anagram|rhym\w*|alphabet\w*|pronounc\w*|vowels?|consonants?|initials|acronym|abbreviat\w*|which word|what word|the word|in english|in latin)\b/i;
+
+  async function quizTrRaw(text){
+    try {
+      const d = await quizGetJson('https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ru&dt=t&q=' + encodeURIComponent(text));
+      return d[0].map(seg => seg[0]).join('');
+    } catch (e) { return null; }
+  }
+  // проверка перевода: вопрос действительно на русском, цифры не потерялись,
+  // варианты ответа после перевода не совпали друг с другом
+  function quizTransOk(src, tr){
+    if (!/[а-яё]/i.test(tr[0])) return false;
+    const seen = new Set();
+    for (let i = 0; i < src.length; i++){
+      if (src[i].replace(/\D/g, '') !== tr[i].replace(/\D/g, '')) return false;
+      if (i){
+        const k = tr[i].toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+        if (!k || seen.has(k)) return false;
+        seen.add(k);
+      }
+    }
+    return true;
+  }
+  /* Текст в кавычках ("..." “...” «...» ‘...’ '...') не переводим: перед переводом он
+     заменяется меткой [N], после перевода возвращается как есть (в «ёлочках»).
+     Если метка потерялась или размножилась — вопрос пропускаем, а не показываем кашу. */
+  const QUIZ_QUOTE_RE = /"([^"]+)"|“([^”]+)”|«([^»]+)»|‘([^’]+)’|(^|[\s(\[])'([^']{2,}?)'(?=$|[\s.,;:!?)\]])/g;
+  const QUIZ_MARK_RE = /\[\s*(\d+)\s*\]/g;
+  function quizProtect(text, store){
+    return text.replace(QUIZ_QUOTE_RE, (m, a, b, c, d, lead, e) => {
+      store.push(a || b || c || d || e);
+      return (lead || '') + '[' + store.length + ']';
+    });
+  }
+  function quizRestore(text, store){
+    return text.replace(QUIZ_MARK_RE, (m, n) => store[n - 1] !== undefined ? '«' + store[n - 1] + '»' : m);
+  }
+  function quizMarks(text){   // набор меток в тексте — для сверки «до» и «после» перевода
+    return (text.match(QUIZ_MARK_RE) || []).map(x => x.replace(/\D/g, '')).sort().join(',');
+  }
+
+  // Ответ переводим ВМЕСТЕ с вопросом ("<вопрос> Answer: <ответ>") и берём часть после «Ответ:».
+  // Так переводчик видит контекст и выбирает верное значение слова: head — «голова», а не «глава».
+  async function quizTrAnswer(qProt, aProt){
+    const full = await quizTrRaw(qProt + ' Answer: ' + aProt);
+    if (!full) return null;
+    const re = /Ответ[а-яё]*\s*[:：]\s*/gi;
+    let last = null, m;
+    while ((m = re.exec(full))) last = m;
+    if (!last) return null;
+    return full.slice(last.index + last[0].length).trim() || null;
+  }
+
+  async function quizTranslate(src){   // src[0] — вопрос, src[1] — верный ответ, дальше — неверные
+    if (src.some(s => /\[\s*\d+\s*\]/.test(s))) return null;   // в исходнике уже есть наши метки — не рискуем
+    const store = [];
+    const prot = src.map(s => quizProtect(s, store));
+    const q = await quizTrRaw(prot[0]);
+    if (!q || quizMarks(q) !== quizMarks(prot[0])) return null;
+    const out = [quizRestore(q.trim(), store)];
+    for (let i = 1; i < src.length; i++){
+      const a = prot[i];
+      // только цифры/знаки или только цитата — переводить нечего
+      if (!/[A-Za-z]/.test(a.replace(QUIZ_MARK_RE, ''))){ out.push(quizRestore(a, store)); continue; }
+      await sleep(150);
+      let tr = await quizTrAnswer(prot[0], a);
+      if (tr && quizMarks(tr) !== quizMarks(a)) tr = null;
+      if (!tr){   // запасной путь: перевод ответа отдельно
+        await sleep(150);
+        tr = await quizTrRaw(a);
+        if (!tr || quizMarks(tr) !== quizMarks(a)) return null;
+      }
+      tr = tr.trim();
+      if (/^\p{Lu}/u.test(src[i])) tr = tr.charAt(0).toUpperCase() + tr.slice(1);   // «голова» -> «Голова»
+      if (!/[.!?…]$/.test(src[i])) tr = tr.replace(/[.。]+$/, '');                  // лишняя точка в конце
+      if (!tr) return null;
+      out.push(quizRestore(tr, store));
+    }
+    return quizTransOk(src, out) ? out : null;
+  }
+  async function quizPrefetch(){
+    if (!quizOn || quizLoading || quizPool.length >= 6 || Date.now() < quizRetryAt) return;
+    quizLoading = true;
+    const gen = quizGen;   // если настройки сменили по ходу загрузки — результат выбрасываем
+    let added = 0;
+    try {
+      if (!quizToken){   // токен не даёт API повторять вопросы
+        const t = await quizGetJson('https://opentdb.com/api_token.php?command=request');
+        quizToken = t.token || '';
+        await sleep(5500);   // лимит API: 1 запрос в 5 секунд
+      }
+      const diff = quizDiff === 'mix' ? (Math.random() < 0.5 ? 'easy' : 'medium') : quizDiff;
+      const d = await quizGetJson('https://opentdb.com/api.php?amount=' + (quizSmall ? 3 : 10) + '&type=multiple&encode=url3986&difficulty=' + diff
+        + (quizTheme !== '0' ? '&category=' + quizTheme : '') + (quizToken ? '&token=' + quizToken : ''));
+      if (gen !== quizGen) return;
+      if (d.response_code === 1){   // в теме мало вопросов такой сложности — пробуем малыми порциями
+        if (quizSmall) quizRetryAt = Date.now() + 30000; else { quizSmall = true; quizRetryAt = Date.now() + 6000; }
+        return;
+      }
+      if (d.response_code === 3 || d.response_code === 4){ quizToken = ''; quizRetryAt = Date.now() + 6000; return; }
+      if (d.response_code === 5){ quizRetryAt = Date.now() + 8000; return; }
+      if (d.response_code !== 0){ quizRetryAt = Date.now() + 30000; return; }
+      for (const it of d.results){
+        if (gen !== quizGen) break;
+        const dec = decodeURIComponent;
+        const src = [dec(it.question), dec(it.correct_answer), ...it.incorrect_answers.map(dec)];
+        if (QUIZ_SKIP.test(src[0])) continue;
+        const tr = await quizTranslate(src);
+        if (tr && gen === quizGen){ quizPool.push({ item: tr, online: true }); added++; }
+        await sleep(400);
+      }
+    } catch (e) { quizRetryAt = Date.now() + 30000; }
+    finally {
+      if (!added && gen === quizGen && Date.now() >= quizRetryAt) quizRetryAt = Date.now() + 30000;
+      quizLoading = false;
+    }
+  }
+
+  function quizRenderBoard(){
+    quizEl.list.textContent = '';
+    const rows = [...quizTotals].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    if (!rows.length){
+      const d = document.createElement('div');
+      d.className = 'quiz-empty'; d.textContent = 'пока никого';
+      quizEl.list.appendChild(d);
+      return;
+    }
+    rows.forEach(([key, n], i) => {
+      const row = document.createElement('div');
+      row.className = 'quiz-row';
+      const a = document.createElement('span');
+      a.textContent = (i + 1) + '. ' + (quizNames.get(key) || key);
+      const b = document.createElement('span');
+      b.textContent = '×' + n;
+      row.append(a, b);
+      quizEl.list.appendChild(row);
+    });
+  }
+
+  function quizIdleText(){
+    const t = 'Подбираем вопросы...';
+    if (quizEl.q.textContent !== t) quizEl.q.textContent = t;
+  }
+
+  function quizNext(){
+    if (!quizPool.length){   // вопросов нет — ждём, пробуем подгрузить
+      quizCur = null; quizRevealed = false;
+      quizEl.q.parentElement.classList.add('idle');
+      quizEl.opts.textContent = '';
+      quizEl.cnt.textContent = '';
+      quizEl.attr.style.visibility = 'hidden';
+      quizEl.bar.style.transform = 'scaleX(0)';
+      quizPrefetch();
+      quizIdleText();
+      return;
+    }
+    const item = quizPool.shift().item;
+    const opts = quizShuffle(item.slice(1));
+    quizCur = { opts, ci: opts.indexOf(item[1]) };
+    quizAnswered = new Set(); quizCorrectN = 0; quizRevealed = false;
+    quizEl.q.parentElement.classList.remove('idle');
+    quizEl.q.textContent = item[0];
+    quizEl.opts.textContent = '';
+    opts.forEach((text, i) => {
+      const d = document.createElement('div');
+      d.className = 'quiz-opt';
+      const b = document.createElement('b'); b.textContent = String(i + 1);
+      d.append(b, document.createTextNode(text));
+      quizEl.opts.appendChild(d);
+    });
+    quizEl.cnt.textContent = 'верно: 0';
+    quizEl.attr.style.visibility = 'visible';
+    quizStart = performance.now();
+    quizPrefetch();
+  }
+
+  function quizReveal(){
+    quizRevealed = true;
+    Array.from(quizEl.opts.children).forEach((d, i) => d.classList.add(i === quizCur.ci ? 'ok' : 'dim'));
+  }
+
+  function quizHandle(username, content){
+    if (!quizOn || !quizCur || quizRevealed) return;
+    const m = /^([1-4])$/.exec(content.trim());
+    if (!m) return;
+    const key = username.toLowerCase();
+    if (!entrants.has(key) || quizAnswered.has(key)) return;   // только участники розыгрыша
+    quizAnswered.add(key);
+    if (Number(m[1]) - 1 !== quizCur.ci) return;
+    quizTotals.set(key, (quizTotals.get(key) || 0) + 1);
+    quizNames.set(key, username);
+    quizCorrectN++;
+    quizEl.cnt.textContent = 'верно: ' + quizCorrectN;
+    quizRenderBoard();
+  }
+
+  /* ---- настройки викторины (под индикатором «в эфире») ---- */
+  const qsBtn = document.getElementById('quizSettingsBtn'), qsPop = document.getElementById('quizSettingsPop');
+  const qsWrap = document.getElementById('quizSettings'), qsOff = document.getElementById('quizOff');
+  const qsTheme = document.getElementById('quizTheme'), qsDiff = document.getElementById('quizDiff');
+  function quizFill(sel, list){
+    list.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); });
+  }
+  quizFill(qsTheme, QUIZ_THEMES); quizFill(qsDiff, QUIZ_DIFFS);
+  function quizSave(){
+    try { localStorage.setItem('quizSettings', JSON.stringify({ off: !quizOn, theme: quizTheme, diff: quizDiff })); } catch (e) {}
+  }
+  try {
+    const c = JSON.parse(localStorage.getItem('quizSettings') || '{}');
+    if (QUIZ_THEMES.some(t => t[0] === c.theme)) quizTheme = c.theme;
+    if (QUIZ_DIFFS.some(t => t[0] === c.diff)) quizDiff = c.diff;
+    if (c.off) quizOn = false;
+  } catch (e) {}
+  qsTheme.value = quizTheme; qsDiff.value = quizDiff;
+  qsOff.checked = !quizOn; quizEl.panel.classList.toggle('off', !quizOn);
+
+  function quizApplySettings(){   // новые тема/сложность: старую очередь вопросов выбрасываем
+    quizTheme = qsTheme.value; quizDiff = qsDiff.value;
+    quizGen++; quizPool = []; quizSmall = false; quizRetryAt = 0;
+    quizSave(); quizPrefetch();
+  }
+  qsTheme.addEventListener('change', quizApplySettings);
+  qsDiff.addEventListener('change', quizApplySettings);
+  qsOff.addEventListener('change', () => {   // галочка: панель плавно скрывается / появляется
+    quizOn = !qsOff.checked;
+    quizEl.panel.classList.toggle('off', !quizOn);
+    quizSave();
+    if (quizOn) quizNext();
+  });
+  function qsClose(){ qsPop.classList.remove('open'); qsBtn.setAttribute('aria-expanded', 'false'); }
+  qsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    qsBtn.setAttribute('aria-expanded', String(qsPop.classList.toggle('open')));
+  });
+  document.addEventListener('click', (e) => { if (!qsWrap.contains(e.target)) qsClose(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') qsClose(); });
+  quizEl.reset.addEventListener('click', () => {
+    quizTotals.clear(); quizNames.clear(); quizRenderBoard();
+  });
+
+  setInterval(() => {
+    if (!quizOn) return;
+    quizPrefetch();
+    if (!quizCur){   // нет вопроса: как только подгрузились — показываем
+      if (quizPool.length) quizNext(); else { quizPrefetch(); quizIdleText(); }
+      return;
+    }
+    const t = performance.now() - quizStart;
+    quizEl.bar.style.transform = 'scaleX(' + Math.max(0, 1 - t / QUIZ_MS) + ')';
+    if (!quizRevealed && t >= QUIZ_REVEAL_MS) quizReveal();
+    if (t >= QUIZ_MS) quizNext();
+  }, 250);
+  quizRenderBoard();
+  if (quizOn) quizNext();
 
   renderEntrants();
 })();
