@@ -1425,7 +1425,7 @@
           <div class="quiz-q" id="quizQ"></div>
           <div id="quizOpts"></div>
           <div class="quiz-bar"><i id="quizBar"></i></div>
-          <div class="quiz-meta"><span id="quizCnt">верно: 0</span><span id="quizAttr">By Coffee_MayZz</span></div>
+          <div class="quiz-meta"><span id="quizCnt">верно: 0</span><span id="quizAttr">by Coffee_MayZz</span></div>
         </div>
       </div>
       <div class="quiz-card quiz-board">
@@ -4597,7 +4597,7 @@
     const m = /^([1-4])$/.exec(content.trim());
     if (!m) return;
     const key = username.toLowerCase();
-    if (!entrants.has(key) || quizAnswered.has(key)) return;   // только участники розыгрыша
+    if (quizAnswered.has(key)) return;   // отвечать может любой зритель чата, один ответ на вопрос
     quizAnswered.add(key);
     if (Number(m[1]) - 1 !== quizCur.ci) return;
     quizTotals.set(key, (quizTotals.get(key) || 0) + 1);
