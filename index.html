@@ -216,6 +216,22 @@
   .quiz-opt b{ color:var(--gold); margin-right:6px; font-family:var(--mono); }
   .quiz-opt.ok{ border-color:var(--green); background:var(--green-soft); }
   .quiz-opt.dim{ opacity:.35; }
+
+  /* Анимация смены вопроса: плавное появление текста и вариантов по очереди.
+     Отключается в режиме "без фоновой галактики" и при системной настройке
+     "меньше анимации", как и остальная декоративная анимация на странице. */
+  @keyframes quizQIn{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
+  @keyframes quizOptIn{ from{ opacity:0; transform:translateY(4px); } to{ opacity:1; transform:none; } }
+  .quiz-q.anim{ animation:quizQIn .32s ease both; }
+  .quiz-opt{ animation:quizOptIn .3s ease both; }
+  .quiz-opt:nth-child(1){ animation-delay:.03s; }
+  .quiz-opt:nth-child(2){ animation-delay:.09s; }
+  .quiz-opt:nth-child(3){ animation-delay:.15s; }
+  .quiz-opt:nth-child(4){ animation-delay:.21s; }
+  .low-power-mode .quiz-q.anim, .low-power-mode .quiz-opt{ animation:none !important; }
+  @media (prefers-reduced-motion:reduce){
+    .quiz-q.anim, .quiz-opt{ animation:none !important; }
+  }
   .quiz-bar{ height:3px; background:var(--line-soft); border-radius:3px; margin:12px 0 8px; overflow:hidden; }
   .quiz-bar i{ display:block; height:100%; background:var(--green); transform-origin:left; will-change:transform; }
   .quiz-meta{ display:flex; justify-content:space-between; font-size:11px; color:var(--muted); }
@@ -1404,12 +1420,12 @@
   <div class="mega">
     <div class="quiz-col" id="quizPanel">
       <div class="quiz-card">
-        <div class="quiz-head"><h2>викторина <span style="color:var(--muted);font-weight:400;">· Бета тест</span></h2></div>
+        <div class="quiz-head"><h2>викторина <span style="color:var(--muted);font-weight:400;">· бета тест</span></h2></div>
         <div class="quiz-body">
           <div class="quiz-q" id="quizQ"></div>
           <div id="quizOpts"></div>
           <div class="quiz-bar"><i id="quizBar"></i></div>
-          <div class="quiz-meta"><span id="quizCnt">верно: 0</span><span id="quizAttr">by coffee_mayzz</span></div>
+          <div class="quiz-meta"><span id="quizCnt">верно: 0</span><span id="quizAttr">By Coffee_MayZz</span></div>
         </div>
       </div>
       <div class="quiz-card quiz-board">
@@ -4302,13 +4318,26 @@
     return r.json();
   }
   // вопросы про буквы, рифмы, слова и т.п. при переводе теряют смысл — такие не берём
-  const QUIZ_SKIP = /\b(spell(?:ed|ing)?|letters?|anagram|rhym\w*|alphabet\w*|pronounc\w*|vowels?|consonants?|initials|acronym|abbreviat\w*|which word|what word|the word|in english|in latin)\b/i;
+  const QUIZ_SKIP = /\b(?:spell(?:ed|ing)?|letters?|anagram|rhym\w*|alphabet\w*|pronounc\w*|vowels?|consonants?|initials|acronym|abbreviat\w*|which word|what word|the word|in english|in latin|in (?:french|german|spanish|italian|japanese|russian|chinese|korean|greek|dutch|portuguese)|how do you say|translat\w*|which language|what language|fill in)\b|_{2,}|\b(?:this|the following|the above|the below) (?:image|picture|photo|logo|song|lyrics?|quote|sentence|code|table|list)\b/i;
+  // варианты вроде «All of the above» после перемешивания теряют смысл — такие вопросы не берём
+  const QUIZ_SKIP_OPT = /\b(?:all|none|both|neither)\s+of\s+(?:the|these|those|them|above|us)\b|\b(?:all|none|both)\s+(?:of\s+)?(?:the\s+)?above\b/i;
 
+  const quizTrCache = new Map();   // одинаковые строки не переводим повторно
   async function quizTrRaw(text){
-    try {
-      const d = await quizGetJson('https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ru&dt=t&q=' + encodeURIComponent(text));
-      return d[0].map(seg => seg[0]).join('');
-    } catch (e) { return null; }
+    if (quizTrCache.has(text)) return quizTrCache.get(text);
+    for (let k = 0; k < 2; k++){   // одна повторная попытка при сбое
+      try {
+        const d = await quizGetJson('https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ru&dt=t&q=' + encodeURIComponent(text));
+        const r = ((d && d[0]) || []).map(seg => (seg && seg[0]) || '').join('');
+        if (r){
+          if (quizTrCache.size > 300) quizTrCache.clear();
+          quizTrCache.set(text, r);
+          return r;
+        }
+      } catch (e) {}
+      await sleep(400);
+    }
+    return null;
   }
   // проверка перевода: вопрос действительно на русском, цифры не потерялись,
   // варианты ответа после перевода не совпали друг с другом
@@ -4330,14 +4359,81 @@
      Если метка потерялась или размножилась — вопрос пропускаем, а не показываем кашу. */
   const QUIZ_QUOTE_RE = /"([^"]+)"|“([^”]+)”|«([^»]+)»|‘([^’]+)’|(^|[\s(\[])'([^']{2,}?)'(?=$|[\s.,;:!?)\]])/g;
   const QUIZ_MARK_RE = /\[\s*(\d+)\s*\]/g;
+  // Кавычки: знак препинания внутри кавычек ("Overwatch,") выносим наружу -> «Overwatch»,
   function quizProtect(text, store){
     return text.replace(QUIZ_QUOTE_RE, (m, a, b, c, d, lead, e) => {
-      store.push(a || b || c || d || e);
-      return (lead || '') + '[' + store.length + ']';
+      let t = a || b || c || d || e, tail = '';
+      const mm = /[,;:]+$/.exec(t) || (/[a-z]\.$/.test(t) ? ['.'] : null);
+      if (mm && t.length > mm[0].length){ tail = mm[0]; t = t.slice(0, -tail.length); }
+      store.push({ t: t.trim(), q: true });
+      return (lead || '') + '[' + store.length + ']' + tail;
     });
   }
   function quizRestore(text, store){
-    return text.replace(QUIZ_MARK_RE, (m, n) => store[n - 1] !== undefined ? '«' + store[n - 1] + '»' : m);
+    return text.replace(QUIZ_MARK_RE, (m, n) => {
+      const it = store[n - 1];
+      return it === undefined ? m : (it.q ? '«' + it.t + '»' : it.t);   // названия — как есть, цитаты — в «ёлочках»
+    });
+  }
+
+  /* Названия и имена (игры, аниме, кино, сериалы, музыка, книги): переводчик их «переводит»
+     буквально (Road Rat -> «Дорожная крыса»), поэтому для категорий Entertainment такие
+     последовательности слов с заглавной буквы тоже заменяются меткой и возвращаются как есть.
+     Слова в начале предложения (Which, In, The...) названиями не считаются. */
+  const QUIZ_KEEP_CAT = /^Entertainment/i;
+  const QUIZ_CAP = 'A-ZÀ-ÖØ-Þ', QUIZ_ALN = 'A-Za-z0-9À-ÖØ-öø-ÿ';
+  const QUIZ_WORD = '[' + QUIZ_CAP + '][' + QUIZ_ALN + ']*(?:[\'’.\\-][' + QUIZ_ALN + ']+)*';
+  const QUIZ_NAME_SRC = QUIZ_WORD + '(?:\\s+(?:(?:of|the|de|la|le|von|van|di|du)\\s+)*(?:' + QUIZ_WORD + '|\\d+))*';
+  const QUIZ_NAME_STOP = new Set(('a an the in on at of and or to for from with by as is are was were did does do has have had ' +
+    'who whom whose what which where when why how this that these those it its his her their name identify complete finish ' +
+    'give select choose list tell guess fill according after before during between among under over into about since until ' +
+    'if while although though because also then so but not no yes once only each every some many most both either neither any all').split(' '));
+  const QUIZ_NAME_EXC = new Set(('i january february march april may june july august september october november december ' +
+    'monday tuesday wednesday thursday friday saturday sunday english american british french german spanish italian russian ' +
+    'japanese chinese korean european asian african christmas easter halloween god').split(' '));
+  function quizProtectNames(text, store){
+    const re = new RegExp(QUIZ_NAME_SRC, 'g'), cands = [];
+    let m;
+    while ((m = re.exec(text))){
+      const parts = m[0].split(/(\s+)/);              // слово, пробел, слово...
+      const toks = parts.filter((_, k) => k % 2 === 0);
+      const atStart = /(^|[.!?]\s+)$/.test(text.slice(0, m.index));
+      let i = 0;
+      if (atStart) while (i < toks.length && QUIZ_NAME_STOP.has(toks[i].toLowerCase())) i++;
+      const core = toks.slice(i);
+      if (!core.some(t => /^[A-ZÀ-ÖØ-Þ]/.test(t))) continue;                       // остались одни цифры
+      if (core.length === 1 && QUIZ_NAME_EXC.has(core[0].toLowerCase())) continue;   // месяцы, национальности...
+      const headLen = parts.slice(0, 2 * i).join('').length;
+      cands.push({ from: m.index + headLen, to: m.index + m[0].length,
+        // одно слово в начале строки может быть просто обычным словом с заглавной («Blue»)
+        weak: atStart && core.length === 1 });
+    }
+    if (!cands.some(c => !c.weak)) return text;   // уверенных названий нет — пусть переводит как обычно
+    let out = '', pos = 0;
+    for (const c of cands){
+      out += text.slice(pos, c.from) + '[' + store.push({ t: text.slice(c.from, c.to), q: false }) + ']';
+      pos = c.to;
+    }
+    return out + text.slice(pos);
+  }
+
+  // Приведение перевода в порядок: пробелы, знаки, заглавная буква, вопросительный знак
+  function quizTidy(t, srcText){
+    t = t.replace(/\s+/g, ' ').replace(/\s+([,.;:!?])/g, '$1').replace(/«\s+/g, '«').replace(/\s+»/g, '»').trim();
+    if (srcText !== undefined){
+      if (/^[а-яё]/.test(t)) t = t.charAt(0).toUpperCase() + t.slice(1);
+      if (/\?\s*$/.test(srcText) && !/\?$/.test(t)) t = t.replace(/[.!…:]+$/, '') + '?';
+    }
+    return t;
+  }
+  // Отрицание: в оригинале NOT/EXCEPT/... заглавными — в переводе должно остаться «не/кроме/...»,
+  // иначе смысл вопроса перевернётся, и такой вопрос лучше отбросить.
+  const QUIZ_NEG_SRC = /\b(?:NOT|EXCEPT|NEVER|LEAST|FALSE|INCORRECT)\b/;
+  const QUIZ_NEG_TR = /(^|[^\p{L}])(?:не|ни|нет|кроме|исключением|ложн\p{L}*|неверн\p{L}*|наименее|никогда)(?![\p{L}])/iu;
+  function quizNegOk(srcQ, trQ){ return !QUIZ_NEG_SRC.test(srcQ) || QUIZ_NEG_TR.test(trQ); }
+  function quizEmph(srcQ, trQ){   // NOT -> НЕ, чтобы отрицание не пропустили
+    if (!/\b(?:NOT|NEVER)\b/.test(srcQ)) return trQ;
+    return trQ.replace(/(^|[^\p{L}])(не|никогда)(?![\p{L}])/iu, (m, pre, w) => pre + w.toUpperCase());
   }
   function quizMarks(text){   // набор меток в тексте — для сверки «до» и «после» перевода
     return (text.match(QUIZ_MARK_RE) || []).map(x => x.replace(/\D/g, '')).sort().join(',');
@@ -4355,17 +4451,20 @@
     return full.slice(last.index + last[0].length).trim() || null;
   }
 
-  async function quizTranslate(src){   // src[0] — вопрос, src[1] — верный ответ, дальше — неверные
+  async function quizTranslate(src, cat){   // src[0] — вопрос, src[1] — верный ответ, дальше — неверные; cat — категория Open Trivia DB
     if (src.some(s => /\[\s*\d+\s*\]/.test(s))) return null;   // в исходнике уже есть наши метки — не рискуем
+    const keep = QUIZ_KEEP_CAT.test(cat || '');   // для игр/кино/аниме названия и имена оставляем как есть
     const store = [];
-    const prot = src.map(s => quizProtect(s, store));
+    const prot = src.map(s => { const p = quizProtect(s, store); return keep ? quizProtectNames(p, store) : p; });
     const q = await quizTrRaw(prot[0]);
     if (!q || quizMarks(q) !== quizMarks(prot[0])) return null;
-    const out = [quizRestore(q.trim(), store)];
+    const qOut = quizEmph(src[0], quizTidy(quizRestore(q.trim(), store), src[0]));
+    if (!quizNegOk(src[0], qOut)) return null;   // «Which is NOT...» не должно потерять отрицание
+    const out = [qOut];
     for (let i = 1; i < src.length; i++){
       const a = prot[i];
-      // только цифры/знаки или только цитата — переводить нечего
-      if (!/[A-Za-z]/.test(a.replace(QUIZ_MARK_RE, ''))){ out.push(quizRestore(a, store)); continue; }
+      // только цифры/знаки или только цитата/название — переводить нечего
+      if (!/[A-Za-z]/.test(a.replace(QUIZ_MARK_RE, ''))){ out.push(quizTidy(quizRestore(a, store))); continue; }
       await sleep(150);
       let tr = await quizTrAnswer(prot[0], a);
       if (tr && quizMarks(tr) !== quizMarks(a)) tr = null;
@@ -4378,7 +4477,7 @@
       if (/^\p{Lu}/u.test(src[i])) tr = tr.charAt(0).toUpperCase() + tr.slice(1);   // «голова» -> «Голова»
       if (!/[.!?…]$/.test(src[i])) tr = tr.replace(/[.。]+$/, '');                  // лишняя точка в конце
       if (!tr) return null;
-      out.push(quizRestore(tr, store));
+      out.push(quizTidy(quizRestore(tr, store)));
     }
     return quizTransOk(src, out) ? out : null;
   }
@@ -4408,8 +4507,8 @@
         if (gen !== quizGen) break;
         const dec = decodeURIComponent;
         const src = [dec(it.question), dec(it.correct_answer), ...it.incorrect_answers.map(dec)];
-        if (QUIZ_SKIP.test(src[0])) continue;
-        const tr = await quizTranslate(src);
+        if (QUIZ_SKIP.test(src[0]) || src.slice(1).some(o => QUIZ_SKIP_OPT.test(o))) continue;
+        const tr = await quizTranslate(src, dec(it.category || ''));
         if (tr && gen === quizGen){ quizPool.push({ item: tr, online: true }); added++; }
         await sleep(400);
       }
@@ -4443,7 +4542,16 @@
 
   function quizIdleText(){
     const t = 'Подбираем вопросы...';
-    if (quizEl.q.textContent !== t) quizEl.q.textContent = t;
+    if (quizEl.q.textContent === t) return;
+    quizEl.q.textContent = t;
+    quizQAnimate();
+  }
+  // Снять и заново навесить класс анимации: без реального изменения DOM между
+  // кадрами браузер не запускает CSS-анимацию повторно на одном и том же узле.
+  function quizQAnimate(){
+    quizEl.q.classList.remove('anim');
+    void quizEl.q.offsetWidth;
+    quizEl.q.classList.add('anim');
   }
 
   function quizNext(){
@@ -4464,6 +4572,7 @@
     quizAnswered = new Set(); quizCorrectN = 0; quizRevealed = false;
     quizEl.q.parentElement.classList.remove('idle');
     quizEl.q.textContent = item[0];
+    quizQAnimate();
     quizEl.opts.textContent = '';
     opts.forEach((text, i) => {
       const d = document.createElement('div');
