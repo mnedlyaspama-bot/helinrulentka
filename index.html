@@ -1277,11 +1277,107 @@
     display:flex; flex-direction:column; align-items:center;
     gap:14px; padding-bottom:14px;
   }
+
+  /* =============== ЭФФЕКТЫ: вступительный экран и рулетка =============== */
+  .splash-screen{ overflow:hidden; }
+
+  .splash-stars{ position:absolute; inset:0; width:100%; height:100%; opacity:0; animation:spFade 2.4s ease .2s forwards; }
+  @keyframes spFade{ to{ opacity:1; } }
+  .splash-aurora i{
+    position:absolute; border-radius:50%; filter:blur(90px); opacity:0;
+    transition:background-color .8s ease;
+    animation:auroraIn 2.6s ease .1s forwards, auroraDrift 20s ease-in-out infinite alternate;
+  }
+  .splash-aurora i:nth-child(1){ width:26vmax; height:26vmax; left:-8vmax; top:-10vmax; background-color:rgba(var(--accent-rgb),.09); }
+  .splash-aurora i:nth-child(2){ width:24vmax; height:24vmax; right:-8vmax; bottom:-9vmax; background-color:rgba(138,180,255,.08); animation-delay:.4s,0s; animation-direction:normal,alternate-reverse; }
+  @keyframes auroraIn{ to{ opacity:1; } }
+  @keyframes auroraDrift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(5vmax,3vmax) scale(1.15); } }
+
+  .splash-orbit{ position:absolute; left:50%; top:50%; width:0; height:0; perspective:900px; pointer-events:none; z-index:1; }
+  .orbit-tilt{ position:absolute; left:0; top:0; transform:rotateZ(-14deg) rotateX(74deg); transform-style:preserve-3d; animation:orbitIn 2.4s cubic-bezier(.22,1,.36,1) .2s backwards; }
+  @keyframes orbitIn{ from{ opacity:0; transform:rotateZ(-40deg) rotateX(74deg) scale(.5); } }
+  .ring{
+    position:absolute; border-radius:50%; border:1px solid rgba(255,255,255,.07);
+    width:var(--s); height:var(--s); left:calc(var(--s) / -2); top:calc(var(--s) / -2);
+    animation:ringSpin var(--sp) linear infinite;
+  }
+  .ring.r1{ --s:540px; --sp:34s; --dc:rgb(var(--accent-rgb)); }
+  .ring.r2{ --s:760px; --sp:52s; --dc:#ffffff; animation-direction:reverse; }
+  .ring.r3{ --s:1020px; --sp:78s; --dc:#ffd166; }
+  @keyframes ringSpin{ to{ transform:rotateZ(360deg); } }
+
+  .splash-card{ position:relative; z-index:2; animation:cardRise .8s cubic-bezier(.22,1,.36,1) .1s backwards; }
+  @keyframes cardRise{ from{ opacity:0; transform:translateY(44px) scale(.94); filter:blur(14px); } }
+  .splash-screen.hide .splash-card{ opacity:0; transform:translateY(-12px) scale(.93); transition:opacity .5s ease, transform .7s cubic-bezier(.22,1,.36,1); }
+
+
+  .sx{ animation:sxIn .55s cubic-bezier(.22,1,.36,1) var(--d,0s) backwards; }
+  @keyframes sxIn{ from{ opacity:0; transform:translateY(16px); filter:blur(6px); } }
+  .splash-title.split{ background:none; color:inherit; -webkit-text-fill-color:initial; }
+  .splash-title .tw{ display:inline-block; white-space:nowrap; }
+  .splash-title .tl{
+    display:inline-block;
+    background:linear-gradient(180deg,#ffffff 0%,#b9c3d6 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    animation:tlIn .6s cubic-bezier(.22,1,.36,1) calc(.3s + var(--i) * .022s) backwards;
+  }
+  @keyframes tlIn{ from{ opacity:0; transform:translateY(.55em) scale(.75); filter:blur(10px); } }
+
+  .splash-btn{ overflow:hidden; }
+  .splash-btn::after{
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(110deg, transparent 30%, rgba(255,255,255,.38) 50%, transparent 70%);
+    transform:translateX(-120%); animation:sheen 4.8s ease-in-out 2.6s infinite;
+  }
+  @keyframes sheen{ 0%,55%{ transform:translateX(-120%); } 85%,100%{ transform:translateX(120%); } }
+
+  @media (prefers-reduced-motion: reduce){
+    .sx,.splash-title .tl,.splash-card,.orbit-tilt,.ring,.splash-aurora i,.splash-btn::after,.splash-stars{ animation:none !important; opacity:1; }
+  }
+
+  /* ---- рулетка: появление из звезды ---- */
+  .roulette-overlay{ transform:translate(-50%,-50%) scale(.82); transition:opacity .35s ease, transform .7s cubic-bezier(.22,1,.36,1); }
+  .roulette-overlay.show{ transform:translate(-50%,-50%) scale(1); }
+  .roulette-overlay::before{
+    content:""; position:absolute; left:50%; top:50%; width:70px; height:70px; margin:-35px 0 0 -35px;
+    border-radius:50%; border:1.5px solid rgba(255,209,102,.75); opacity:0; pointer-events:none;
+  }
+  .roulette-overlay.show::before{ animation:starRing 1.1s cubic-bezier(.22,1,.36,1) .05s; }
+  @keyframes starRing{ 0%{ opacity:.95; transform:scale(.3); } 100%{ opacity:0; transform:scale(4.6); } }
+  .roulette-tag{ opacity:0; transform:translateY(8px); transition:opacity .5s ease, transform .6s cubic-bezier(.22,1,.36,1); }
+  .roulette-overlay.show .roulette-tag{ opacity:1; transform:none; transition-delay:.3s; }
+  /* окно раскрывается из тонкой линии */
+  .roulette-window{ clip-path:inset(46% 4% 46% 4% round 16px); transition:clip-path .8s cubic-bezier(.22,1,.36,1) .1s; }
+  .roulette-overlay.show .roulette-window{ clip-path:inset(-60px round 76px); }
+
+  /* ---- рулетка: ход ленты ---- */
+  .roulette-track, .rw-reroll-track{ will-change:transform; }
+  .roulette-row, .rw-reroll-row{ opacity:.5; transition:opacity .12s ease, color .12s ease, transform .12s ease, text-shadow .12s ease; }
+  .roulette-row.cur, .rw-reroll-row.cur{ opacity:1; color:var(--gold); transform:scale(1.1); text-shadow:0 0 16px rgba(255,209,102,.7); }
+  .roulette-row.win, .rw-reroll-row.win{ animation:rowWin .8s cubic-bezier(.34,1.56,.64,1) both; }
+  @keyframes rowWin{ 0%{ transform:scale(1.1); } 45%{ transform:scale(1.2); text-shadow:0 0 28px rgba(255,209,102,1); } 100%{ transform:scale(1.14); } }
+  .roulette-window.spinning .roulette-highlight{ animation:hlSpin .45s ease-in-out infinite alternate; }
+  @keyframes hlSpin{ from{ opacity:.65; } to{ opacity:1; } }
+  .roulette-window.landed, .rw-reroll-window.landed{ border-color:rgba(255,209,102,.75); animation:landGlow 1.2s ease-out both; }
+  @keyframes landGlow{ 0%{ box-shadow:0 0 0 rgba(255,209,102,0); } 30%{ box-shadow:0 0 54px rgba(255,209,102,.6); } 100%{ box-shadow:0 0 30px rgba(255,209,102,.2); } }
+  .landed .roulette-highlight, .landed .rw-reroll-highlight{ animation:hlFlash 1.1s ease-out; }
+  @keyframes hlFlash{ 0%{ box-shadow:0 0 26px rgba(255,209,102,.95), inset 0 0 26px rgba(255,209,102,.65); } 100%{ box-shadow:0 0 0 rgba(255,209,102,0), inset 0 0 0 rgba(255,209,102,0); } }
+  .roulette-pointer{ position:absolute; top:50%; width:0; height:0; z-index:3; pointer-events:none; border-top:6px solid transparent; border-bottom:6px solid transparent; filter:drop-shadow(0 0 5px rgba(255,209,102,.9)); transform:translateY(-50%); }
+  .roulette-pointer.l{ left:0; border-left:9px solid var(--gold); }
+  .roulette-pointer.r{ right:0; border-right:9px solid var(--gold); }
+
+  /* ---- победитель выпрыгивает из рулетки ---- */
+  .winner-entry .name{ animation:winPop 1s cubic-bezier(.22,1,.36,1) calc(var(--i,0) * .14s) backwards; }
+  @keyframes winPop{ from{ opacity:0; transform:scale(.65); filter:blur(14px); letter-spacing:.14em; } 60%{ filter:blur(0); } }
+  .rw-reroll-window.landed{ animation:none; box-shadow:none; }
 </style>
 </head>
 <body class="app-hidden">
 
 <div class="splash-screen" id="splashScreen">
+<canvas id="splashStars" class="splash-stars" aria-hidden="true"></canvas>
+<div class="splash-aurora" aria-hidden="true"><i></i><i></i></div>
+<div class="splash-orbit" aria-hidden="true"><div class="orbit-tilt"><b class="ring r1"></b><b class="ring r2"></b><b class="ring r3"></b></div></div>
   <div class="splash-card">
     <div class="platform-toggle" id="platformToggle" role="group" aria-label="Платформа">
       <button type="button" class="platform-btn kick active" id="platformBtnKick" data-platform="kick">
@@ -2617,7 +2713,7 @@
     }
 
     function revealApp(){
-      splash.classList.add('hide');
+      splash.classList.add('hide'); document.dispatchEvent(new Event('splash-leave'));
       document.body.classList.remove('app-hidden');
       setTimeout(() => { splash.style.display = 'none'; }, 750);
     }
@@ -3183,7 +3279,7 @@
     keys.forEach((key) => {
       const displayName = entrants.get(key) || key;
       const entry = document.createElement('div');
-      entry.className = 'winner-entry';
+      entry.className = 'winner-entry'; entry.style.setProperty('--i', el.winnersList.children.length);
       const nameEl = document.createElement('div');
       nameEl.className = 'name';
       nameEl.textContent = displayName;
@@ -3289,6 +3385,11 @@
   // вызывает onDone. isCurrent позволяет прервать анимацию, если пока она
   // играла, розыгрыш перезапустили (см. rouletteRun).
   function animateRouletteTrack({ track, rows, rowClass, rowH, durationMs, isCurrent, onDone }){
+    const win = track.parentElement;
+    track.style.transition = 'none';
+    track.style.filter = '';
+    win.classList.remove('landed');
+    win.classList.add('spinning');
     track.innerHTML = '';
     rows.forEach((name) => {
       const row = document.createElement('div');
@@ -3296,22 +3397,64 @@
       row.textContent = name;
       track.appendChild(row);
     });
+    const kids = track.children;
 
-    // окно рулетки показывает 3 строки — победитель (предпоследняя строка) должен
-    // оказаться ровно в центральном слоте, а под ним останется ещё одно имя —
-    // как будто рулетка чуть-чуть не докрутила
+    // окно показывает 3 строки — победитель (предпоследняя) встаёт в центр.
+    // Лента чуть «пролетает» мимо и пружинисто возвращается — как механический барабан.
     const finalOffset = (rows.length - 3) * rowH;
+    const target = finalOffset + rowH * 0.22;
     track.style.transform = 'translateY(0px)';
 
-    const start = performance.now();
+    // стрелки по краям «щёлкают» на каждой строке, как трещотка
+    let ptrs = [];
+    if (win.classList.contains('roulette-window')){
+      ptrs = Array.from(win.querySelectorAll('.roulette-pointer'));
+      if (!ptrs.length){
+        ['l','r'].forEach((s) => {
+          const p = document.createElement('i');
+          p.className = 'roulette-pointer ' + s;
+          win.appendChild(p);
+          ptrs.push(p);
+        });
+      }
+    }
+    let prevIdx = -1, prevOff = 0, prevT = performance.now(), lastTick = 0;
+    const start = prevT;
+
+    function mark(idx, now){
+      if (idx === prevIdx) return;
+      if (kids[prevIdx]) kids[prevIdx].classList.remove('cur');
+      if (kids[idx]) kids[idx].classList.add('cur');
+      prevIdx = idx;
+      if (now - lastTick > 30){
+        lastTick = now;
+        ptrs.forEach((p) => p.animate(
+          [{ transform:'translateY(-50%) scale(1.7)' }, { transform:'translateY(-50%) scale(1)' }],
+          { duration:150, easing:'ease-out' }
+        ));
+      }
+    }
+
     function step(now){
       if (isCurrent && !isCurrent()) return;
       const p = Math.min(1, (now - start) / durationMs);
-      const eased = 1 - Math.pow(1 - p, 4); // резко разгоняется, плавно тормозит к финалу
-      track.style.transform = 'translateY(' + (-finalOffset * eased) + 'px)';
+      const eased = 1 - Math.pow(1 - p, 4); // резкий разгон, плавное торможение
+      const off = target * eased;
+      track.style.transform = 'translateY(' + (-off) + 'px)';
+      // размытие движения пропорционально скорости ленты
+      const v = Math.abs(off - prevOff) / Math.max(1, now - prevT);
+      prevOff = off; prevT = now;
+      track.style.filter = 'blur(' + Math.min(2.4, v * 1000 / rowH / 11).toFixed(2) + 'px)';
+      mark(Math.min(kids.length - 1, Math.round(off / rowH) + 1), now);
       if (p < 1){
         requestAnimationFrame(step);
       } else {
+        track.style.filter = '';
+        track.style.transition = 'transform .45s cubic-bezier(.22,1,.36,1)';
+        track.style.transform = 'translateY(' + (-finalOffset) + 'px)';
+        win.classList.remove('spinning');
+        win.classList.add('landed');
+        if (kids[prevIdx]) kids[prevIdx].classList.add('win');
         onDone();
       }
     }
@@ -4175,6 +4318,81 @@
   renderEntrants();
 })();
 
+</script>
+
+<script>
+/* Вступительный экран: звёздный тоннель, буквы заголовка, поочерёдное появление блоков */
+(function(){
+  const splash = document.getElementById('splashScreen');
+  const cv = document.getElementById('splashStars');
+  if (!splash || !cv) return;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // остальные блоки карточки появляются по очереди
+  const card = splash.querySelector('.splash-card');
+  [['.platform-toggle', .2], ['.splash-title', .35], ['.splash-subtitle', .5], ['.splash-field', .6], ['.splash-btn', .7], ['.splash-hint', .8]]
+    .forEach(([sel, d]) => {
+      const n = card.querySelector(sel);
+      if (n){ n.classList.add('sx'); n.style.setProperty('--d', d + 's'); }
+    });
+
+
+  // звёздный тоннель
+  const c = cv.getContext('2d');
+  let W = 0, H = 0, D = Math.min(2, window.devicePixelRatio || 1);
+  const stars = [];
+  let warp = 0, leaving = false, stopped = false, last = performance.now(), fr = 0, accent = '83,252,24';
+  let mx = 0, my = 0, tx = 0, ty = 0;
+  const mk = (init) => ({ x:(Math.random()-.5)*2, y:(Math.random()-.5)*2, z:init ? Math.random() : 1, s:.6 + Math.random()*1.2, a:.35 + Math.random()*.65, h:Math.random() < .2 });
+
+  function size(){
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W*D); cv.height = Math.round(H*D);
+    c.setTransform(D,0,0,D,0,0);
+    const n = Math.round(Math.min(260, W*H/6500));
+    while (stars.length < n) stars.push(mk(true));
+    stars.length = n;
+  }
+  size();
+  window.addEventListener('resize', size);
+  window.addEventListener('pointermove', (e) => { tx = e.clientX/W - .5; ty = e.clientY/H - .5; }, { passive:true });
+  document.addEventListener('splash-leave', () => {
+    leaving = true;
+    setTimeout(() => { stopped = true; }, 900);
+  });
+
+  function frame(t){
+    if (stopped) return;
+    const dt = Math.min(50, t - last); last = t;
+    if (leaving) warp = Math.min(1, warp + dt/650);
+    if (!(fr++ % 30)){
+      const v = getComputedStyle(document.body).getPropertyValue('--accent-rgb').trim();
+      if (v) accent = v;
+    }
+    mx += (tx - mx) * .04; my += (ty - my) * .04;
+    const speed = reduce ? 0 : (.00004 + .0022*warp*warp);
+    const k = Math.min(W,H) * .42;
+    const ox = W/2 - mx*28, oy = H/2 - my*28;
+    c.clearRect(0,0,W,H);
+    for (const s of stars){
+      const z0 = s.z + dt*speed*.9;
+      s.z -= dt*speed;
+      let x1 = ox + s.x/s.z*k, y1 = oy + s.y/s.z*k;
+      if (s.z < .03 || x1 < -40 || x1 > W+40 || y1 < -40 || y1 > H+40){ Object.assign(s, mk(false)); continue; }
+      const a = Math.min(1, (1 - s.z) * 1.6) * s.a;
+      const col = s.h ? 'rgba(' + accent + ',' + a + ')' : 'rgba(215,226,255,' + a + ')';
+      const sz = s.s * (.5 + (1 - s.z));
+      if (warp > .02){
+        c.strokeStyle = col; c.lineWidth = sz;
+        c.beginPath(); c.moveTo(ox + s.x/z0*k, oy + s.y/z0*k); c.lineTo(x1, y1); c.stroke();
+      } else {
+        c.fillStyle = col; c.fillRect(x1 - sz/2, y1 - sz/2, sz, sz);
+      }
+    }
+    rafWhenVisible(frame);
+  }
+  requestAnimationFrame(frame);
+})();
 </script>
 </body>
 </html>
