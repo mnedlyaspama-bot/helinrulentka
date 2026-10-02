@@ -1103,10 +1103,7 @@
     align-items:center;
     justify-content:center;
     padding:24px;
-    background:
-      radial-gradient(ellipse 900px 500px at 50% -10%, rgba(138,180,255,0.12), transparent 60%),
-      radial-gradient(ellipse 700px 500px at 85% 10%, rgba(var(--accent-rgb),0.10), transparent 60%),
-      var(--bg-0);
+    background:var(--bg-0);
     transition: opacity .7s cubic-bezier(.22,1,.36,1), filter .7s cubic-bezier(.22,1,.36,1), transform .7s cubic-bezier(.22,1,.36,1);
   }
   .splash-screen.hide{
@@ -1284,12 +1281,12 @@
   .splash-stars{ position:absolute; inset:0; width:100%; height:100%; opacity:0; animation:spFade 2.4s ease .2s forwards; }
   @keyframes spFade{ to{ opacity:1; } }
   .splash-aurora i{
-    position:absolute; border-radius:50%; filter:blur(90px); opacity:0;
+    position:absolute; opacity:0;
     transition:background-color .8s ease;
-    animation:auroraIn 2.6s ease .1s forwards, auroraDrift 20s ease-in-out infinite alternate;
+    animation:auroraIn 2.6s ease .1s forwards;
   }
-  .splash-aurora i:nth-child(1){ width:26vmax; height:26vmax; left:-8vmax; top:-10vmax; background-color:rgba(var(--accent-rgb),.09); }
-  .splash-aurora i:nth-child(2){ width:24vmax; height:24vmax; right:-8vmax; bottom:-9vmax; background-color:rgba(138,180,255,.08); animation-delay:.4s,0s; animation-direction:normal,alternate-reverse; }
+  .splash-aurora i:nth-child(1){ inset:0; border-radius:0; transform-origin:0 0; background:radial-gradient(ellipse 62% 66% at 0 0, rgba(var(--accent-rgb),.30), rgba(var(--accent-rgb),.10) 45%, transparent 75%); }
+  .splash-aurora i:nth-child(2){ inset:0; border-radius:0; transform-origin:100% 100%; background:radial-gradient(ellipse 58% 62% at 100% 100%, rgba(120,140,255,.28), rgba(120,140,255,.09) 45%, transparent 75%); animation-delay:.4s; }
   @keyframes auroraIn{ to{ opacity:1; } }
   @keyframes auroraDrift{ from{ transform:translate(0,0) scale(1); } to{ transform:translate(5vmax,3vmax) scale(1.15); } }
 
@@ -1370,6 +1367,20 @@
   .winner-entry .name{ animation:winPop 1s cubic-bezier(.22,1,.36,1) calc(var(--i,0) * .14s) backwards; }
   @keyframes winPop{ from{ opacity:0; transform:scale(.65); filter:blur(14px); letter-spacing:.14em; } 60%{ filter:blur(0); } }
   .rw-reroll-window.landed{ animation:none; box-shadow:none; }
+  .obs-link-wrap{ display:flex; justify-content:center; margin-top:26px; }
+  .obs-btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    font-family:var(--display); font-weight:600; font-size:14px; text-decoration:none;
+    color:var(--text); background:var(--panel-solid);
+    border:1px solid rgba(var(--accent-rgb),.45); border-radius:var(--r-sm);
+    padding:12px 26px;
+    transition:border-color .15s ease, background .15s ease, transform .1s ease;
+  }
+  .obs-btn:hover{ border-color:var(--green); background:var(--green-soft); }
+  .obs-btn:active{ transform:scale(.98); }
+  .obs-btn:focus-visible{ outline:2px solid var(--green); outline-offset:2px; }
+  .splash-screen .obs-link-wrap{ position:absolute; left:0; right:0; top:calc(100% + 18px); margin:0; z-index:3; pointer-events:none; animation:sxIn .55s cubic-bezier(.22,1,.36,1) .9s backwards; }
+  .splash-screen .obs-btn{ pointer-events:auto; }
 </style>
 </head>
 <body class="app-hidden">
@@ -1404,6 +1415,7 @@
     </button>
 
     <div class="splash-hint">Примечание: <code>nickname</code> может отличаться в ссылке.</div>
+    <div class="obs-link-wrap"><a class="obs-btn" href="https://mnedlyaspama-bot.github.io/ChatOBS/" target="_blank" rel="noopener">чат для OBS</a></div>
   </div>
 </div>
 
